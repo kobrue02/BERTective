@@ -1,0 +1,8 @@
+{"authors": {
+    "Helmut": {"age": 65, "sex": "male"},
+    "Christian": {"age": 60, "sex": "male"},
+    "André": {"age": 77, "sex": "male"},
+    "Wiebke": {"age": 50, "sex": "female"},
+    "Sascha": {"age": 40, "sex": "male"}
+}
+}
