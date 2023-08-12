@@ -1,11 +1,12 @@
 import requests
 import json
+import jsonlines
 import operator
 import spacy
 from time import sleep
 from tqdm import tqdm
 
-from zdl_regio_client import zdl_request
+from scraping_tools.zdl_regio_client import zdl_request
 
 import spacy
 
@@ -32,14 +33,14 @@ with open("data/ZDL/wordlist-lemmas_2.txt", "r", encoding="utf-8") as f:
     wordlist_german = [line.replace("\n", "") for line in f.readlines()]
 
 print(len(wordlist_german))
-
+zdl_full_corpus = {}
 for word in tqdm(wordlist_german):
     try:
         r = zdl_request(word)
     except:
-        sleep(10)
+        sleep(5)
         continue
-    ppm_dict = {item["areal"]: item["ppm_rel"] for item in r}
+    ppm_dict = {item["areal"]: item["ppm"] for item in r}
     sorted_ = sorted(ppm_dict.items(), key=operator.itemgetter(1), reverse=True)
     if len(sorted_) < 2:
         continue
@@ -47,7 +48,8 @@ for word in tqdm(wordlist_german):
     second_val = sorted_[1][1]
     diff = max_val - second_val
     word_diff[word] = diff
-    tqdm.write(f"{word}: {diff}")
+    tqdm.write(f"{word}: {str(ppm_dict)}")
+    tqdm.write(str(sum(ppm_dict.values())))
 
 
 with open("data/ZDL/diff.json", "r", encoding="utf-8") as f:
