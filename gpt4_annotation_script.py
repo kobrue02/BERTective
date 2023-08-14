@@ -2,7 +2,7 @@ import ast
 import json
 import openai
 import time
-secret_key = "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"
+secret_key = ""    # to be filled locally
 
 openai.api_key = secret_key
 
