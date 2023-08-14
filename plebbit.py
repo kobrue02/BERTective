@@ -1,17 +1,15 @@
 import datetime
 import requests
 import json
-
+from tqdm import tqdm
 from zdl_vector_model import areal_dict
 
 def pushshift_request(subreddit: str, limit: str, before: str = "0", after: str = "0"):
 
     url = __pushshift_url(subreddit, limit, before, after)
     r = requests.get(url)
-    print(r)
-
     json_data = r.json()
-    print(json_data)
+
     return json_data
 
 def __pushshift_url(subreddit: str, limit: str, before: str, after: str) -> str:
@@ -63,15 +61,35 @@ def __filename(obj: dict) -> str:
 
 if __name__ == "__main__":
     
-    for val_list in areal_dict.values():
+    last_data = {}
+    for val_list in tqdm(areal_dict.values()):
         for locale in val_list:
-            month = 8
-            while month > 0:
-                data = pushshift_request(locale, "1000", before=f"05.0{str(month)}.2023")
-                print(data)
-                try:
-                    file = __filename(data)
-                    __to_json_file(data, file)
-                except:
-                    pass
-                month -= 1
+            year = 2023
+            while year > 2016:
+
+                if year == 2023:
+                    month = 8
+                else:
+                    month = 12
+                
+                month = int(month)
+                while month > 0:
+                    
+                    if month < 10:
+                        month = str(f"0{month}")
+
+                    tqdm.write(f"28.{str(month)}.{str(year)}")
+                    data = pushshift_request(locale, "100", before=f"28.{str(month)}.{str(year)}")
+                    if data == last_data:
+                        tqdm.write('no new data.')
+                        pass
+                    else:
+                        last_data = data
+                        tqdm.write('crawled new batch.')
+                        try:
+                            file = __filename(data)
+                            __to_json_file(data, file)
+                        except:
+                            pass
+                    month = int(month) - 1
+                year -= 1
