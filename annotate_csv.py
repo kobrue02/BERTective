@@ -1,27 +1,33 @@
+"""
+Mit diesem Skript können mithilfe von Regex-Patterns automatisch Alters- und Geschlechtsangaben
+aus Reddit-Posts ausgelesen und annotiert werden.
+Es wird ein pandas Dataframe zurückgegeben, welches in anderen Skripts verwendet, oder
+als csv gespeichert werden kann.
+"""
 import json
 import re
 import pandas as pd
 
 
 def get_age_from_str(input_str: str) -> int:
-
+    """ finds double-digit number within string """
     search = re.search(r"[1-9][0-9]", input_str)
     age = search.group(0)
 
     return int(age)
 
 def get_gender_from_str(input_str: str) -> str:
-
+    """ finds gender tag in string """
     search = re.search(r"(m|M|f|F)", input_str)
-
     if search:
         return search.group(0).upper()
-
     else:
         return "N/A"
 
-
 def find_matches(data: dict) -> list[dict]:
+
+    """ finds gender or age tags within a reddit post and returns them 
+    in an annotated dictionary """
 
     good_list = {}
 
@@ -40,7 +46,6 @@ def find_matches(data: dict) -> list[dict]:
         
         if result:
             good_list[f"item_{n}"] = {"match": "".join(result), "content": selftext}
-
 
     for item in good_list.keys():
         row = good_list[item]
