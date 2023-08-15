@@ -1,3 +1,9 @@
+"""
+Wir haben versucht, die demografischen Eigenschaften der Autoren aus dem Gutenberg-Datensatz automatisiert von
+GPT-4 annotieren zu lassen. Leider sind die meisten Autoren nicht in den Trainingsdaten von GPT-4 enthalten, 
+weshalb es selten brauchbare Ergebnisse liefert. Wir annotieren die Daten also von Hand.
+"""
+
 import ast
 import json
 import openai
@@ -50,10 +56,10 @@ if __name__ == "__main__":
         try:
             raw_response = __response(author, book)
         except (openai.error.ServiceUnavailableError, openai.error.APIConnectionError):
-            time.sleep(5)
+            time.sleep(5)    # timeout 
             continue
         try:
-            response_dict = ast.literal_eval(raw_response)
+            response_dict = ast.literal_eval(raw_response)   # read gpt response into dict
         except SyntaxError:
             print(raw_response)
             continue
