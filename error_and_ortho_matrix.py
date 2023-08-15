@@ -1,3 +1,11 @@
+"""
+Wir testen mit diesem Skript, inwiefern sich die Verwendung von bestimmten Orthographie-Versionen
+und bestimmten Fehlern dazu eignen, Aussagen aber den Bildungsgrad eines Autoren zu treffen.
+Für die Texten werden mithilfe von Wortlisten, die wir vom Rechtschreibforum https://www.korrekturen.de/ beziehen,
+"Fehlervektoren" und "Orthographievektoren" erzeugt, welche wir zum Trainieren und Testen verschiedener Klassifizierungs-
+modelle verwenden. Die Ergebnisse sind vielversprechend.
+"""
+
 import json
 import numpy as np
 import pandas as pd
@@ -28,7 +36,7 @@ with open("data/annotation/error_tuples.json", "r", encoding='utf-8') as f:
     error_tuples = json.load(f)
 
 
-def vector_sum(vectors: list) -> np.array:
+def vector_average(vectors: list) -> np.array:
     result = np.zeros((96,))
     for vector in vectors:
         result = np.add(result, vector)
@@ -46,12 +54,12 @@ def find_ortho_match_in_text(text: str, orthography_set: str) -> np.array:
     matched_vectors = []
     for item in orthography["orthographies"][orthography_set]:
         if item in text and item != "":
-            matched_vectors.append(nlp(str(item)).vector)
+            matched_vectors.append(nlp(str(item)).vector)  # SpaCy tok2vec
     if matched_vectors == []:
         return np.zeros((96,))
     else:
         # average the embeddings
-        return vector_sum(matched_vectors)
+        return vector_average(matched_vectors)
     
 
 def find_error_match_in_text(text: str, reference_set: str) -> np.array:
@@ -80,7 +88,7 @@ def find_error_match_in_text(text: str, reference_set: str) -> np.array:
         return np.zeros((96,))
     else:
         # average the embeddings
-        return vector_sum(matched_vectors)
+        return vector_average(matched_vectors)
 
 
 reddit_matrix_list = []
@@ -139,3 +147,16 @@ if __name__ == "__main__":
     y_pred = model.predict(X_test)
 
     print(classification_report(y_test, y_pred))
+
+
+    """
+                 precision    recall  f1-score   support
+
+       Azubi       0.74      0.93      0.83       140
+     Student       0.88      0.62      0.73       120
+
+    accuracy                            0.79       260
+    macro avg       0.81      0.78      0.78       260
+    weighted avg    0.81      0.79      0.78       260
+
+    """
