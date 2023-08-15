@@ -1,6 +1,13 @@
+"""
+Ein Test, ob GPT-4 sich zum automatischen Annotieren demografischer Eigenschaften bekannter 
+Autoren eignet. Bei mehrmaligem Ausführen des Skripts erhält man verschiedene Antworten.
+Es eignet sich also nicht.
+"""
+
 import openai
 import time
-secret_key = "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"
+
+secret_key = ""  # to be filled locally
 openai.api_key = secret_key
 
 def __response():
