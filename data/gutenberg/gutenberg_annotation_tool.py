@@ -1,3 +1,9 @@
+"""
+Wir verwenden dieses Tool, um selber 'gemütlich' in der Konsolo demografische Eigenschaften
+der Autoren von Texten aus dem Gutenberg-Datensatz zu annotieren. 
+Man googlet bspw. das Alter von Gustav Aimard als er "Mexikanische Nächte" schrieb.
+Die Annotationen werden in einer JSON-Datei nach jeder Eingabe gespeichert.
+"""
 import json
 
 with open("data.json", "r", encoding="UTF-8") as f:
