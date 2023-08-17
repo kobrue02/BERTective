@@ -1,9 +1,16 @@
-#from transformers import BertTokenizerFast
+"""
+Dieses Skript liest eine JSONL-Datei mit annotierten Sätzen.
+Die Annotationen werden in ein für BERT verwertbares Format umgewandelt.
+Anschließend kann BERT auf den Annotationen trainiert werden, um diese anschließend selber vorherzusagen.
+https://towardsdatascience.com/named-entity-recognition-with-bert-in-pytorch-a454405e0b6a
+wurde als Inspiration verwendet.
+"""
+
 import jsonlines
 import pandas as pd
+import numpy as np
 from pprint import pprint
-
-#tokenizer = BertTokenizerFast.from_pretrained('bert-base-german-cased')
+from bert_model import BertModel, train_loop
 
 def jsonline_to_row(label: str, prodigy_item: dict) -> str:
 
@@ -27,18 +34,27 @@ def jsonline_to_row(label: str, prodigy_item: dict) -> str:
             return_row += "X "
     return return_row[:-1]
 
-path = "data/annotation/sentence_level_annotations.jsonl"
-all_labels = ['wOrder', 'wFehlt', 'Interpkt.', 'Rechtschr.', 'ugs.', 'Angliz.', 'geh.', 'emo.', 'wRedund', 'Jarg.']
-label_item_lists = {}
 
-with jsonlines.open(path, mode='r') as reader:
-    objects = [item for item in reader]
+def generate_dataset(path: str) -> pd.DataFrame:
+    all_labels = ['wOrder', 'wFehlt', 'Interpkt.', 'Rechtschr.', 'ugs.', 'Angliz.', 'geh.', 'emo.', 'wRedund', 'Jarg.']
+    label_item_lists = {}
 
-for label in all_labels:
-    label_item_lists[label] = [jsonline_to_row(label, obj) for obj in objects]
-label_item_lists['text'] = [obj['text'] for obj in objects]
+    with jsonlines.open(path, mode='r') as reader:
+        objects = [item for item in reader]
+
+    for label in all_labels:
+        label_item_lists[label] = [jsonline_to_row(label, obj) for obj in objects]
+    label_item_lists['text'] = [obj['text'] for obj in objects]
+        
+    training_dataset = pd.DataFrame(label_item_lists)
+    return training_dataset
     
-training_dataset = pd.DataFrame(label_item_lists)
-print(training_dataset.head())
-
-
+if __name__ == "__main__":
+    path = "data/annotation/sentence_level_annotations.jsonl"
+    df = generate_dataset(path)
+    df = df[["text", "wOrder"]]
+    df_train, df_val, df_test = np.split(df.sample(frac=1, random_state=42),
+                            [int(.8 * len(df)), int(.9 * len(df))])
+    model = BertModel()
+    train_loop(model, df_train, df_val)
+    
