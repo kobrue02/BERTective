@@ -1,0 +1,10 @@
+pandas
+scikit-learn
+langdetect
+matplotlib
+tensorflow
+seaborn
+jsonlines
+spacy
+nltk
+openai
