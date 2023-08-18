@@ -20,19 +20,19 @@ from sklearn.metrics import classification_report
 
 nlp = spacy.load("de_core_news_sm")
 
-with open("data/reddit/education/Azubis.json", "r", encoding='utf-8') as f:
+with open("../data/reddit/education/Azubis.json", "r", encoding='utf-8') as f:
     azubis_data = json.load(f)
 
-with open("data/reddit/education/Studium.json", "r", encoding='utf-8') as f:
+with open("../data/reddit/education/Studium.json", "r", encoding='utf-8') as f:
     studi_data = json.load(f)
 
-with open("data/reddit/dating/beziehungen.json", "r", encoding='utf-8') as f:
+with open("../data/reddit/dating/beziehungen.json", "r", encoding='utf-8') as f:
     bzh_data = json.load(f)
 
-with open("data/annotation/orthography.json", "r", encoding='utf-8') as f:
+with open("../data/annotation/orthography.json", "r", encoding='utf-8') as f:
     orthography = json.load(f)
 
-with open("data/annotation/error_tuples.json", "r", encoding='utf-8') as f:
+with open("../data/annotation/error_tuples.json", "r", encoding='utf-8') as f:
     error_tuples = json.load(f)
 
 
