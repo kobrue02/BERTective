@@ -10,7 +10,7 @@ import jsonlines
 import pandas as pd
 import numpy as np
 from pprint import pprint
-from bert_model import BertModel, train_loop
+from models.bert_model import BertModel, train_loop, evaluate
 
 def jsonline_to_row(label: str, prodigy_item: dict) -> str:
 
@@ -50,11 +50,14 @@ def generate_dataset(path: str) -> pd.DataFrame:
     return training_dataset
     
 if __name__ == "__main__":
+    model = BertModel()
     path = "data/annotation/sentence_level_annotations.jsonl"
     df = generate_dataset(path)
-    df = df[["text", "wOrder"]]
-    df_train, df_val, df_test = np.split(df.sample(frac=1, random_state=42),
-                            [int(.8 * len(df)), int(.9 * len(df))])
-    model = BertModel()
-    train_loop(model, df_train, df_val)
-    
+    for label in ['wOrder', 'wFehlt', 'Interpkt.', 'Rechtschr.', 'ugs.', 'Angliz.', 'geh.', 'emo.', 'wRedund', 'Jarg.']:
+        print(label)
+        temp_df = df[["text", label]]
+        df_train, df_val, df_test = np.split(temp_df.sample(frac=1, random_state=42),
+                                [int(.8 * len(temp_df)), int(.9 * len(temp_df))])
+        train_loop(model, df_train, df_val)
+        evaluate(model, df_test)
+        print("-"*64)
