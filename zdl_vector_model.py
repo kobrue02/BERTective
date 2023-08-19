@@ -26,8 +26,20 @@ import seaborn as sns
 
 class ZDLVectorModel:
 
-    def __init__(self, read_pickle: bool, use_model) -> None:
+    def __init__(self, read_pickle: bool, use_model, locale_type: str = "all") -> None:
 
+        """
+        This class builds a regiolect prediction model, using ZDL Regionalkorpus resources
+        using which we can embed tokens in 6-dimensional vectors that represent their usage in different areas of Germany
+        :param read_pickle: whether to read an already an existing pickle file with training data or not
+        :param use_model: the classifier to use
+        :param locale_type: "all", "EAST_WEST", or "NORTH_SOUTH"
+        """
+        if not locale_type in ["all", "EAST_WEST", "NORTH_SOUTH"]:
+            raise ValueError('locale_type should be one of "all", "EAST_WEST", or "NORTH_SOUTH".')
+        
+        self.locale_type = locale_type
+        # dictionary linking cities from subreddits to the areal they belong to
         self.areal_dict = {
                             "DE-NORTH-EAST": ["Rostock", "Berlin","luebeck", "Potsdam"],
                             "DE-NORTH-WEST": ["bremen", "Hamburg","Hannover", "bielefeld", "Dortmund", "kiel", "Paderborn"],
@@ -37,31 +49,49 @@ class ZDLVectorModel:
                             "DE-SOUTH-WEST": ["stuttgart", "augsburg", "freiburg", "karlsruhe", "Ulm", "Tuebingen", "Ludwigsburg", "Heidelberg", "stuttgart"],
                             }
         
+        with open("vectors/zdl_vector_dict.json", "r") as f:
+            self.vector_dict = json.load(f)
+
         self.use_model = use_model
         if read_pickle:
             data = pd.read_pickle("vectors/zdl_vector_matrix.pickle")
         else:
-            data = self.train()
-        self.training_data = self.create_training_set_from_data(data)
+            data = self.__train()
+        self.training_data = self.__create_training_set_from_data(data)
+        self.model = self.__build_model()
 
-        with open("vectors/zdl_vector_dict.json", "r") as f:
-            self.vector_dict = json.load(f)
-    
-    def create_training_set_from_data(self, data: pd.DataFrame):
-
-        maxVal = self.find_longest_vector(data)
-        data["padded_vectors"] = [self.zero_pad_vector(vector, maxVal) for vector in data["vector"].tolist()]
-        data["simple_locale"] = [self.simplify_locale(locale) for locale in data["LOCALE"].tolist()]
-        data["LOCALE_NUM"] = [self.locale_to_num(locale) for locale in data["LOCALE"].tolist()]
+    def __create_training_set_from_data(self, data: pd.DataFrame):
+        """ adds padding to vectors and makes format readable for classifier """
+        maxVal = self.__find_longest_vector(data)
+        data["padded_vectors"] = [self.__zero_pad_vector(vector, maxVal) for vector in data["vector"].tolist()]
+        data["simple_locale"] = [self.__simplify_locale(locale) for locale in data["LOCALE"].tolist()]
+        data["LOCALE_NUM"] = [self.__locale_to_num(locale) for locale in data["LOCALE"].tolist()]
 
         return data
+    
+    def __build_model(self):
 
-    def json_to_vector(self, response: dict) -> np.array:
+        X = self.training_data["padded_vectors"].tolist()
+
+        if self.locale_type == "all":
+            y = self.training_data["LOCALE_NUM"]
+        else:
+            y = self.training_data["simple_locale"]
+
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
+            X, y, test_size=0.1, random_state=42, stratify=y)
+        
+        model = self.use_model
+        model.fit(self.X_train, self.y_train)
+
+        return model
+
+    def __json_to_vector(self, response: dict) -> np.array:
         """ turns the ZDL response into a 6d vector """
         ppm_values = [item["ppm"] for item in response]
         return np.array(ppm_values)
 
-    def vectorize_sample(self, text: str) -> np.array:
+    def __vectorize_sample(self, text: str) -> np.array:
         """ tokenizes and vectorizes a text sample using ZDL regionalkorpus """
         vectors = []
         text = text.replace("\n", "") 
@@ -81,7 +111,7 @@ class ZDLVectorModel:
                     r = zdl_request(token)
                 except (requests.exceptions.JSONDecodeError, ValueError):
                     continue    # some words return no result
-                vector = self.json_to_vector(r)
+                vector = self.__json_to_vector(r)
                 self.vector_dict[token] = vector.tolist()   # save the vector as a list (for json)
             else:
                 # else get vector from dict
@@ -92,7 +122,7 @@ class ZDLVectorModel:
         # keep only complete vectors
         return np.array([v for v in vectors if len(v) == 6])
 
-    def find_longest_vector(self, data: pd.DataFrame) -> int:
+    def __find_longest_vector(self, data: pd.DataFrame) -> int:
         # for zero padding we need to know the length to which we want to pad
         maxVal = 0
         for vector in data["vector"].tolist():
@@ -101,7 +131,7 @@ class ZDLVectorModel:
                 maxVal = val
         return maxVal
 
-    def check_text_is_german(self, text: str) -> bool:
+    def __check_text_is_german(self, text: str) -> bool:
         """ return true if text is german else false """
         DetectorFactory.seed = 0
         # we skip very short texts or posts removed from reddit
@@ -115,7 +145,7 @@ class ZDLVectorModel:
         tqdm.write(str(lang))
         return lang == "de"
 
-    def zero_pad_vector(self, vector: np.array, maxval: int) -> list:
+    def __zero_pad_vector(self, vector: np.array, maxval: int) -> list:
         """ pad vector to length of longest vector in dataset """
 
         zero_vec = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])  # empty vector
@@ -126,22 +156,27 @@ class ZDLVectorModel:
 
         return vector #.reshape(-1,1)
 
-    def simplify_locale(self, locale: str) -> str:
-        locales = {
-            "DE-NORTH": ["DE-NORTH-WEST", "DE-NORTH-EAST"],
-            "DE-SOUTH": ["DE-SOUTH-WEST", "DE-SOUTH-EAST", "DE-MIDDLE-WEST", "DE-MIDDLE-EAST"]
-            }
-        
-        locales_2 = {
-            "DE-EAST": ["DE-NORTH-EAST", "DE-MIDDLE-EAST", "DE-SOUTH-EAST"],
-            "DE-WEST": ["DE-NORTH-WEST", "DE-MIDDLE-WEST", "DE-SOUTH-WEST"]
-        }
+    def __simplify_locale(self, locale: str) -> str:
 
-        for key in locales_2.keys():
-            if locale in locales_2[key]:
+        if self.locale_type == "NORTH_SOUTH":
+            locales = {
+                "DE-NORTH": ["DE-NORTH-WEST", "DE-NORTH-EAST"],
+                "DE-SOUTH": ["DE-SOUTH-WEST", "DE-SOUTH-EAST", "DE-MIDDLE-WEST", "DE-MIDDLE-EAST"]
+                }
+
+        elif self.locale_type == "EAST_WEST":
+            locales = {
+                "DE-EAST": ["DE-NORTH-EAST", "DE-MIDDLE-EAST", "DE-SOUTH-EAST"],
+                "DE-WEST": ["DE-NORTH-WEST", "DE-MIDDLE-WEST", "DE-SOUTH-WEST"]
+            }
+        else:
+            return locale
+        
+        for key in locales.keys():
+            if locale in locales[key]:
                 return key
         
-    def locale_to_num(self, locale: str) -> int:
+    def __locale_to_num(self, locale: str) -> int:
         locs = {
             "DE-NORTH-EAST": 1,
             "DE-NORTH-WEST": 2,
@@ -152,7 +187,7 @@ class ZDLVectorModel:
         }
         return locs[locale]
 
-    def train(self):
+    def __train(self):
         directory_in_str = "data/reddit/locales"
         directory = os.fsencode(directory_in_str)
         dataframe_list = []   
@@ -164,12 +199,12 @@ class ZDLVectorModel:
                     for key in self.areal_dict.keys():
                         if filename.split(".")[0] in self.areal_dict[key]:
                             current_data = pd.DataFrame()
-                            current_data["texts"] = list(set([item["selftext"] for item in file_data["data"] if self.check_text_is_german(item["selftext"])]))
+                            current_data["texts"] = list(set([item["selftext"] for item in file_data["data"] if self.__check_text_is_german(item["selftext"])]))
                             current_data["LOCALE"] = key
                             dataframe_list.append(current_data)
 
         training_data = pd.concat(dataframe_list)
-        training_data["vector"] = [self.vectorize_sample(text) for text in tqdm(training_data["texts"].tolist())]
+        training_data["vector"] = [self.__vectorize_sample(text) for text in tqdm(training_data["texts"].tolist())]
         print(training_data.head())
         training_data.reset_index(inplace=True, drop=True)
         training_data.to_pickle("vectors/zdl_vector_matrix.pickle")
@@ -181,13 +216,7 @@ class ZDLVectorModel:
     
     def evaluate(self):
 
-        X, y = self.training_data["padded_vectors"].tolist(), self.training_data["LOCALE_NUM"]
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.1, random_state=42, stratify=y)
-        
-        model = self.use_model
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+        y_pred = self.model.predict(self.X_test)
         #y_pred = np.round(y_pred)
 
         target_names = [
@@ -199,11 +228,10 @@ class ZDLVectorModel:
                 "DE-SOUTH-WEST"]
         
         report = classification_report(
-            y_test, 
+            self.y_test, 
             y_pred, 
             output_dict=True,
-            target_names=target_names)
-        print(report)
+            target_names=target_names if self.locale_type == "all" else None)
 
         sns.heatmap(pd.DataFrame(report).iloc[:-1, :].T, annot=True, cmap="Greens")
         plt.show()
@@ -223,7 +251,8 @@ if __name__ == "__main__":
 
     model = ZDLVectorModel(
         read_pickle=True, 
-        use_model=MLPClassifier())
+        use_model=MLPClassifier(),
+        locale_type='all')
     model.evaluate()
 
     exit()
@@ -241,8 +270,8 @@ if __name__ == "__main__":
     sample = """Moin in die Runde,
 
 ich hab auf meinem Balkon beobachtet, wie ab und zu Bienen in einen kleinen Spalt fliegen. Hab mir nichts dabei gedacht und es einfach mal zu geklebt. Das war im nach hinein ein fataler Fehler. Denn jetzt fliegen da etwa 30-40 Bienen herum, was vermuten lässt, dass da ein ganzes Nest hinter der nebenstehenden Holzverkleidung ist. Was kann man dazu in Bremen tun? Kammerjäger ist eigentlich keine Option, da die ja unter Naturschutz stehen und ich sie eher umsiedeln möchte. Kennt ihr vielleicht jemanden oder eine Idee was ich machen kann?"""
-    sample_vector = vectorize_sample(sample)
-    sample_vector = zero_pad_vector(sample_vector, maxVal)
+    sample_vector = __vectorize_sample(sample)
+    sample_vector = __zero_pad_vector(sample_vector, maxVal)
     sample_vector = sample_vector.reshape(1, -1)
     print(model.predict_proba(sample_vector))
 
