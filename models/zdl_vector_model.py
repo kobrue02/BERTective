@@ -1,12 +1,3 @@
-import pandas as pd
-import numpy as np
-
-import os
-import re
-import json
-import requests
-from tqdm import tqdm
-
 # to import scraper from same-level subdirectory
 import os
 import sys
@@ -14,9 +5,18 @@ current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
 
+
+from german_stopwords import stopwords_
 from scraping_tools.zdl_regio_client import zdl_request, tokenize
+
+import json
 from langdetect import detect, DetectorFactory, lang_detect_exception
 import matplotlib.pyplot as plt
+import numpy as np
+import os
+import pandas as pd
+import re
+import requests
 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -27,24 +27,28 @@ from sklearn.metrics import classification_report
 from sklearn.utils import shuffle
 from sklearn.tree import export_graphviz
 
-from german_stopwords import stopwords_
-
-import tensorflow as tf
 import seaborn as sns
+from tqdm import tqdm
+import tensorflow as tf
+
 
 class ZDLVectorModel:
 
-    def __init__(self, read_pickle: bool, use_model, locale_type: str = "all") -> None:
+    def __init__(self, read_pickle: bool, classifier, locale_type: str = "all") -> None:
 
         """
         This class builds a regiolect prediction model, using ZDL Regionalkorpus resources
         using which we can embed tokens in 6-dimensional vectors that represent their usage in different areas of Germany
         :param read_pickle: whether to read an already an existing pickle file with training data or not
-        :param use_model: the classifier to use
+        :param classifier: the classifier to use
         :param locale_type: "all", "EAST_WEST", or "NORTH_SOUTH"
         """
+
         if not locale_type in ["all", "EAST_WEST", "NORTH_SOUTH"]:
             raise ValueError('locale_type should be one of "all", "EAST_WEST", or "NORTH_SOUTH".')
+        
+        if not isinstance(read_pickle, bool):
+            raise ValueError('read_pickle has to be True or False')
         
         self.locale_type = locale_type
         # dictionary linking cities from subreddits to the areal they belong to
@@ -60,7 +64,7 @@ class ZDLVectorModel:
         with open("vectors/zdl_vector_dict.json", "r") as f:
             self.vector_dict = json.load(f)
 
-        self.use_model = use_model
+        self.classifier = classifier
         if read_pickle:
             data = pd.read_pickle("vectors/zdl_vector_matrix.pickle")
         else:
@@ -89,7 +93,7 @@ class ZDLVectorModel:
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             X, y, test_size=0.1, random_state=42, stratify=y)
         
-        model = self.use_model
+        model = self.classifier
         model.fit(self.X_train, self.y_train)
 
         return model
@@ -259,7 +263,7 @@ if __name__ == "__main__":
 
     model = ZDLVectorModel(
         read_pickle=True, 
-        use_model=MLPClassifier(),
+        classifier=MLPClassifier(),
         locale_type='all')
     model.evaluate()
 
