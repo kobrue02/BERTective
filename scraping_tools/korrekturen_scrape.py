@@ -15,15 +15,15 @@ def run():
         error_tuples = []
 
         if type_ == 'spelling_error':
-            base_url = "https://www.korrekturen.de/beliebte_fehler"
+            BASE_URL = "https://www.korrekturen.de/beliebte_fehler"
         if type_ == 'orthography':
-            base_url = "https://www.korrekturen.de/wortliste"
+            BASE_URL = "https://www.korrekturen.de/wortliste"
 
-        print(base_url)
+        print(BASE_URL)
         time.sleep(1)
         for _ in tqdm(alphabet):
 
-            letter_url = f"{base_url}/{_}/"
+            letter_url = f"{BASE_URL}/{_}/"
 
             for page in range(1, 6):
                 if page == 1:
@@ -69,8 +69,6 @@ def run():
             ortho_raw_to_readable(error_json_output)
 
         
-
-
 if __name__ == "__main__":
     run()
 

@@ -82,14 +82,14 @@ def get_all_articles():
             f.seek(0)
             json.dump(url_dict, f)
 
-if __name__ == "__main__":
+def run():
 
     with open("data/achse/achse_des_guten.json", "r", encoding="utf-8") as f:
         urls = json.load(f)
     
     achse_dict = {}
     i = 0
-    for url in tqdm(urls["urls"][30000:40000]):
+    for url in tqdm(urls["urls"]):
         age, sex, content = get_age_and_sex(url)
         if any([age, sex]):
             achse_dict[f"txt {i}"] = {"content": content, "age": age, "sex": sex}
@@ -99,4 +99,8 @@ if __name__ == "__main__":
     achse_df.reset_index(drop=True, inplace=True)
     print(achse_df.head())
     
-    achse_df.to_excel("achse_des_guten_annotated_40000_items.xlsx", index=False)
+    achse_df.to_excel("achse_des_guten_annotated_items.xlsx", index=False)
+
+if __name__ == "__main__":
+
+    run()
