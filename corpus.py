@@ -40,19 +40,19 @@ class DataObject:
         :param source: die Quelle des Texts (z.B. Reddit)
         """
         
-        self.content = {'text': text,
-                        'author_age': author_age,
-                        'author_gender': author_gender,
-                        'author_regiolect': author_regiolect,
-                        'author_education': author_education,
-                        'source': source}
-        
         self.text = text
         self.author_age = author_age
         self.author_gender = author_gender
         self.author_regiolect = author_regiolect
         self.author_education = author_education
         self.source = source
+
+        self.content = {'text': text,
+                        'author_age': author_age,
+                        'author_gender': author_gender,
+                        'author_regiolect': author_regiolect,
+                        'author_education': author_education,
+                        'source': source}
 
 
 class DataCorpus:
@@ -77,7 +77,7 @@ class DataCorpus:
             raise ValueError("item couldn't be verified.")
     
     def __verify(self, item: DataObject) -> bool:
-        
+        """ verify whether a DataObject contains all required information in the right formats """
         features = ['text', 'author_age', 'author_gender', 'author_regiolect', 'author_education', 'source']
 
         if not list(item.content.keys()) == features:
@@ -127,9 +127,9 @@ class DataCorpus:
     def save_to_avro(self, path):
         # specifying the avro schema
         schema = {
-                'doc': 'malldata',
-                'name': 'malldata',
-                'namespace': 'malldata',
+                'doc': 'corpus',
+                'name': 'corpus',
+                'namespace': 'corpus',
                 'type': 'record',
                 'fields': [
                     {'name': 'text', 'type': 'string'},
