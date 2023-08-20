@@ -1,10 +1,17 @@
+# to import scraper from same-level subdirectory
+import os
+import sys
+current = os.path.dirname(os.path.realpath(__file__))
+parent = os.path.dirname(current)
+sys.path.append(parent)
+
 import json
 import requests
 import time
 
 from bs4 import BeautifulSoup
 from tqdm import tqdm
-from korrekturen_test import ortho_raw_to_readable
+from scraping_tools.korrekturen_test import ortho_raw_to_readable
 
 def run():
     alphabet = "abcdefghijklmnopqrstuvwxyz"

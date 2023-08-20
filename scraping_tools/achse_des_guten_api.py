@@ -82,14 +82,15 @@ def get_all_articles():
             f.seek(0)
             json.dump(url_dict, f)
 
-def run():
+def run(path: str):
 
+    print("ACHSE_DES_GUTEN_LOOKUP")
     with open("data/achse/achse_des_guten.json", "r", encoding="utf-8") as f:
         urls = json.load(f)
     
     achse_dict = {}
     i = 0
-    for url in tqdm(urls["urls"]):
+    for url in tqdm(urls["urls"][:100]):
         age, sex, content = get_age_and_sex(url)
         if any([age, sex]):
             achse_dict[f"txt {i}"] = {"content": content, "age": age, "sex": sex}
@@ -97,9 +98,8 @@ def run():
 
     achse_df = pd.DataFrame.from_dict(achse_dict).transpose()
     achse_df.reset_index(drop=True, inplace=True)
-    print(achse_df.head())
     
-    achse_df.to_excel("achse_des_guten_annotated_items.xlsx", index=False)
+    achse_df.to_parquet(f"{path}achse_des_guten_annotated_items.parquet", index=False)
 
 if __name__ == "__main__":
 
