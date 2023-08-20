@@ -36,7 +36,7 @@ def clean_list(L: list) -> list:
             return_list.append(fixed_item)
         return return_list
 
-def ortho_raw_to_readable(raw_triplets: dict):
+def ortho_raw_to_readable(raw_triplets: dict, path: str):
 
     all_triples = raw_triplets["errors"]
 
@@ -59,5 +59,5 @@ def ortho_raw_to_readable(raw_triplets: dict):
             raise KeyError
         ortho_dict["orthographies"][var_name] = clean_orthography
 
-    with open(f"data/annotation/orthography.json", "w") as f:
+    with open(f"{path}/annotation/orthography.json", "w") as f:
         json.dump(ortho_dict, f)

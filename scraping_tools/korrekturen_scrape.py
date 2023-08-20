@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 from scraping_tools.korrekturen_test import ortho_raw_to_readable
 
-def run():
+def run(path: str):
     alphabet = "abcdefghijklmnopqrstuvwxyz"
 
     for type_ in ('spelling_error', 'orthography'):
@@ -69,11 +69,11 @@ def run():
         error_json_output = {'errors': error_tuples}
 
         if type_ == 'spelling_error':
-            file_name = 'data/annotation/error_tuples.json'
+            file_name = f'{path}/annotation/error_tuples.json'
             with open(file_name, 'w') as f:
                 json.dump(error_json_output, f)
         if type_ == 'orthography':
-            ortho_raw_to_readable(error_json_output)
+            ortho_raw_to_readable(error_json_output, path)
 
         
 if __name__ == "__main__":

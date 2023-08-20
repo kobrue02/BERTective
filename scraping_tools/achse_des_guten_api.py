@@ -99,7 +99,7 @@ def run(path: str):
     achse_df = pd.DataFrame.from_dict(achse_dict).transpose()
     achse_df.reset_index(drop=True, inplace=True)
     
-    achse_df.to_parquet(f"{path}achse_des_guten_annotated_items.parquet", index=False)
+    achse_df.to_parquet(f"{path}/achse/achse_des_guten_annotated_items.parquet", index=False)
 
 if __name__ == "__main__":
 
