@@ -31,6 +31,14 @@ import seaborn as sns
 from tqdm import tqdm
 import tensorflow as tf
 
+AREAL_DICT = {
+              "DE-NORTH-EAST": ["Rostock", "Berlin","luebeck", "Potsdam"],
+              "DE-NORTH-WEST": ["bremen", "Hamburg","Hannover", "bielefeld", "Dortmund", "kiel", "Paderborn"],
+              "DE-MIDDLE-EAST": ["Leipzig", "dresden", "HalleSaale", "erfurt", "jena"],
+              "DE-MIDDLE-WEST": ["frankfurt", "duesseldorf", "cologne","Bonn", "Mainz", "Wiesbaden", "kaiserslautern", "Mannheim", "Saarland"],
+              "DE-SOUTH-EAST": ["Munich", "Nurnberg", "Regensburg", "Würzburg", "bayreuth", "bavaria"],
+              "DE-SOUTH-WEST": ["stuttgart", "augsburg", "freiburg", "karlsruhe", "Ulm", "Tuebingen", "Ludwigsburg", "Heidelberg", "stuttgart"],
+            }
 
 class ZDLVectorModel:
 
@@ -52,14 +60,7 @@ class ZDLVectorModel:
         
         self.locale_type = locale_type
         # dictionary linking cities from subreddits to the areal they belong to
-        self.areal_dict = {
-                            "DE-NORTH-EAST": ["Rostock", "Berlin","luebeck", "Potsdam"],
-                            "DE-NORTH-WEST": ["bremen", "Hamburg","Hannover", "bielefeld", "Dortmund", "kiel", "Paderborn"],
-                            "DE-MIDDLE-EAST": ["Leipzig", "dresden", "HalleSaale", "erfurt", "jena"],
-                            "DE-MIDDLE-WEST": ["frankfurt", "duesseldorf", "cologne","Bonn", "Mainz", "Wiesbaden", "kaiserslautern", "Mannheim", "Saarland"],
-                            "DE-SOUTH-EAST": ["Munich", "Nurnberg", "Regensburg", "Würzburg", "bayreuth", "bavaria"],
-                            "DE-SOUTH-WEST": ["stuttgart", "augsburg", "freiburg", "karlsruhe", "Ulm", "Tuebingen", "Ludwigsburg", "Heidelberg", "stuttgart"],
-                            }
+        self.areal_dict = AREAL_DICT
         
         with open("vectors/zdl_vector_dict.json", "r") as f:
             self.vector_dict = json.load(f)
