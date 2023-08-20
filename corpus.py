@@ -4,7 +4,7 @@ allen verschiedenen Quellen gespeichert werden können
 """
 
 import pandas as pd
-
+from fastavro import writer, parse_schema, reader
 
 class DataObject:
 
@@ -115,7 +115,6 @@ class DataCorpus:
     def as_dataframe(self) -> pd.DataFrame:
         
         data = pd.DataFrame()
-        print(self.corpus)
         data['text'] = [item.text for item in self.corpus]
         data['author_age'] = [item.author_age for item in self.corpus]
         data['author_gender'] = [item.author_gender for item in self.corpus]
@@ -124,6 +123,54 @@ class DataCorpus:
         data['source'] = [item.source for item in self.corpus]
 
         return data
+    
+    def save_to_avro(self, path):
+        # specifying the avro schema
+        schema = {
+                'doc': 'malldata',
+                'name': 'malldata',
+                'namespace': 'malldata',
+                'type': 'record',
+                'fields': [
+                    {'name': 'text', 'type': 'string'},
+                    {'name': 'author_age', 'type': 'int'},
+                    {'name': 'author_gender', 'type': 'string'},
+                    {'name': 'author_regiolect', 'type': 'string'},
+                    {'name': 'author_education', 'type': 'string'},
+                    {'name': 'source', 'type': 'string'}
+                    ]
+                }
+        parsed_schema = parse_schema(schema)
+        dataframe = self.as_dataframe()
+        records = dataframe.to_dict('records')
+
+        # writing to avro file format
+        with open(path, 'wb') as out:
+            writer(out, parsed_schema, records)
+
+    def read_avro(self, path: str):
+        # reading it back into pandas dataframe
+        avro_records = []
+
+        #Read the Avro file
+        with open(path, 'rb') as fo:
+            avro_reader = reader(fo)
+            for record in avro_reader:
+                avro_records.append(record)
+
+        #Convert to pd.DataFrame
+        df_avro = pd.DataFrame(avro_records)
+
+        for index, row in df_avro.iterrows():
+            obj = DataObject(row['text'], 
+                             row['author_age'],
+                             row['author_gender'],
+                             row['author_regiolect'],
+                             row['author_education'],
+                             row['source'])
+            
+            self.add_item(obj)
+
 
 
     def __getitem__(self, i):
@@ -144,21 +191,24 @@ class DataCorpus:
 if __name__ == "__main__":
 
     corpus = DataCorpus()
-    sample_1 = DataObject("Hallo wie geht es euch?",
-                        22,
+    #corpus.read_avro('data/corpus.avro')
+    #print(corpus.as_dataframe().head())
+    sample_1 = DataObject("sfgfghjghj?",
+                        28,
                         "male",
                         "DE-NORTH-WEST",
                         "has_bachelor",
                         "reddit")
     corpus.add_item(sample_1)
-    sample_2 = DataObject("XXXXXXXXXXX",
-                        15,
-                        "male",
+    sample_2 = DataObject("YYYY",
+                        265,
+                        "female",
                         "DE-NORTH-WEST",
-                        "has_bachelor",
+                        "has_master",
                         "reddit")
     corpus.add_item(sample_2)
     print(corpus.as_dataframe().head())
+    corpus.save_to_avro('data/corpus.avro')
 
 
         
