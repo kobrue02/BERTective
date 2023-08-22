@@ -1,0 +1,84 @@
+import requests
+import time
+import json
+
+from bs4 import BeautifulSoup
+from pprint import pprint
+
+
+def call_url(url: str):
+    r = requests.get(url)
+    return r.text
+
+def find_word_list(url: str) -> list[str]:
+    words = []
+    html = call_url(url)
+    soup = BeautifulSoup(html, features="lxml")
+    parser_output = soup.find('div', {'class': 'mw-parser-output'})
+    paragraphs = parser_output.find_all('p')
+    #print(len(paragraphs))
+    return paragraphs
+
+if __name__ == "__main__":
+    wiki_list = [
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Abkürzungen_im_Internet',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Anglizismen',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Arabismen',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Aufwertung',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Binomiale',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Biologie/Fachwortliste',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Chemie/Fachwortliste',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Chinesische_Wörter_in_der_deutschen_Sprache',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/DDR-Sprache',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Gallizismen',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Geowissenschaften',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Geschichte',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Hispanismen',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Japanische_Wörter_in_der_deutschen_Sprache',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Jägersprache',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Mathematik/Fachwortliste',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Medizin/Fachwortliste',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Militär/Fachwortliste',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Musik/Fachwortliste',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Netzjargon',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Ornithologie/Fachwortliste',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Pharmazie',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Philosophie',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Physik/Fachwortliste',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Politik',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Rechtswissenschaften',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Religion',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Romanismen',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Slawismen',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Weinbau',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Wirtschaft'
+    ]
+    #L = find_word_list(f'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Anglizismen')
+
+    wiktionary = {}
+    for url in wiki_list:
+        base = str(url.split('/')[-1])
+        print(url)
+        L = find_word_list(url)
+        target = []
+        for i in range(4, 30):
+            try:
+                word_list = [
+                    item.get_text().lower() for item in L[i] if 
+                    '–' not in str(item.get_text()) and '-' not in str(item.get_text()) and 
+                    str(item.get_text()) != '\n' and len(item.get_text()) > 3
+                    ]
+                
+                target += word_list
+            except IndexError:
+                break
+
+        if len(target) > 1:
+            wiktionary[base] = target
+        else:
+            print(target)
+
+pprint(wiktionary)
+print(list(wiktionary.keys()))
+with open('data/wiktionary/wiktionary.json', 'w', encoding='utf-8') as f:
+    json.dump(wiktionary, f) 
