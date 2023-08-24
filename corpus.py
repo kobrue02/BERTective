@@ -40,12 +40,12 @@ class DataObject:
         :param source: die Quelle des Texts (z.B. Reddit)
         """
         
-        self.text = text
-        self.author_age = author_age
-        self.author_gender = author_gender
-        self.author_regiolect = author_regiolect
-        self.author_education = author_education
-        self.source = source
+        self.text: str = text
+        self.author_age:  int = author_age
+        self.author_gender: str = author_gender
+        self.author_regiolect: str = author_regiolect
+        self.author_education: str = author_education
+        self.source: str = source
 
         self.content = {'text': text,
                         'author_age': author_age,
