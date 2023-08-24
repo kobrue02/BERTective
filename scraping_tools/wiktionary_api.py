@@ -51,7 +51,15 @@ if __name__ == "__main__":
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Romanismen',
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Slawismen',
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Weinbau',
-        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Wirtschaft'
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Wirtschaft',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Griechische_Pr%C3%A4fixe',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Griechische_Suffixe',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Informationstechnik',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Lateinische_Pr%C3%A4fixe',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Lateinische_Suffixe',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Linguistik/Fachwortliste',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Philatelie',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Sprichw%C3%B6rter'
     ]
     #L = find_word_list(f'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Anglizismen')
 

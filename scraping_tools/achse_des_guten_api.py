@@ -90,7 +90,7 @@ def run(path: str):
     
     achse_dict = {}
     i = 0
-    for url in tqdm(urls["urls"][:100]):
+    for url in tqdm(urls["urls"]):
         age, sex, content = get_age_and_sex(url)
         if any([age, sex]):
             achse_dict[f"txt {i}"] = {"content": content, "age": age, "sex": sex}
