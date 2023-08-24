@@ -42,7 +42,7 @@ AREAL_DICT = {
 
 class ZDLVectorModel:
 
-    def __init__(self, read_pickle: bool, classifier, locale_type: str = "all") -> None:
+    def __init__(self, read_pickle: bool, classifier, locale_type: str = "all", path: str = 'data') -> None:
 
         """
         This class builds a regiolect prediction model, using ZDL Regionalkorpus resources
@@ -58,6 +58,7 @@ class ZDLVectorModel:
         if not isinstance(read_pickle, bool):
             raise ValueError('read_pickle has to be True or False')
         
+        self.path = path
         self.locale_type = locale_type
         # dictionary linking cities from subreddits to the areal they belong to
         self.areal_dict = AREAL_DICT
@@ -201,7 +202,7 @@ class ZDLVectorModel:
         return locs[locale]
 
     def __train(self):
-        directory_in_str = "data/reddit/locales"
+        directory_in_str = f"{self.path}/reddit/locales"
         directory = os.fsencode(directory_in_str)
         dataframe_list = []   
         for file in tqdm(os.listdir(directory)):
