@@ -63,7 +63,7 @@ class DataCorpus:
     """
 
     def __init__(self) -> None:
-        self.corpus = []
+        self.corpus: list[DataObject] = []
         
     def add_item(self, item: DataObject):
 

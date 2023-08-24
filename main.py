@@ -4,6 +4,11 @@ from models.zdl_vector_model import AREAL_DICT
 from models.wiktionary_matrix import WiktionaryModel
 from tqdm import tqdm
 from langdetect import detect, DetectorFactory, lang_detect_exception
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.svm import SVR
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
 
 import argparse
 import json
@@ -90,7 +95,43 @@ if __name__ == "__main__":
     #time.sleep(2)
     
     wiktionary_matrix = WiktionaryModel(data)
-    print(wiktionary_matrix.matrix_as_dataframe.head())
+    #wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
+    #print(wiktionary_matrix.vectors)
+
+    ids_ = []
+
+    for item in data.corpus:
+        if item.source == "ACHGUT":
+            ids_.append(item.content['id'])
+        else:
+            break
+
+    y = [float(data[id].author_age) for id in ids_]
+    X = [wiktionary_matrix[id] for id in ids_]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42, stratify=y)
+
+    model = SVR()
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+
+    offset = 0
+    for i in zip(y_test, y_pred):
+        print(i)
+        offset += (abs(i[0] - i[1]))
+    print('-'*64)
+    print(offset / len(y_test))
+
+    #print(classification_report(y_test, y_pred))
+    
+    #wiktionary_df = pd.read_parquet('data/wiktionary/wiktionary.parquet')
+    #print(wiktionary_df.head())
+
+
+    
+    wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
     exit()
     download_data(['achse', 'ortho', 'reddit_locales'], "test")
 
