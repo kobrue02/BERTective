@@ -11,7 +11,6 @@ def call_url(url: str):
     return r.text
 
 def find_word_list(url: str) -> list[str]:
-    words = []
     html = call_url(url)
     soup = BeautifulSoup(html, features="lxml")
     parser_output = soup.find('div', {'class': 'mw-parser-output'})
@@ -19,6 +18,33 @@ def find_word_list(url: str) -> list[str]:
     #print(len(paragraphs))
     return paragraphs
 
+def find_word_list_other(url: str) -> list[str]:
+    html = call_url(url)
+    soup = BeautifulSoup(html, features="lxml")
+    try:
+        jsAdd = soup.find('div', {'class': 'jsAdd'})
+        paragraphs = jsAdd.find_all('li')
+    except AttributeError:
+        jsAdd = soup.find('div', {'class': 'mw-body-content mw-content-ltr'})
+        paragraphs = jsAdd.find_all('li')
+    
+    return paragraphs
+    
+
+def get_words_word_list(L: list) -> list:
+    target = []
+    for i in range(4, 30):
+        try:
+            word_list = [
+                item.get_text().lower() for item in L[i] if 
+                '–' not in str(item.get_text()) and '-' not in str(item.get_text()) and 
+                str(item.get_text()) != '\n' and len(item.get_text()) > 3
+                ]
+                
+            target += word_list
+        except IndexError:
+            break
+    return target
 if __name__ == "__main__":
     wiki_list = [
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Abkürzungen_im_Internet',
@@ -52,14 +78,14 @@ if __name__ == "__main__":
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Slawismen',
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Weinbau',
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Wirtschaft',
-        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Griechische_Pr%C3%A4fixe',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Griechische_Präfixe',
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Griechische_Suffixe',
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Informationstechnik',
-        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Lateinische_Pr%C3%A4fixe',
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Lateinische_Präfixe',
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Lateinische_Suffixe',
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Linguistik/Fachwortliste',
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Philatelie',
-        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Sprichw%C3%B6rter'
+        'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Sprichwörter'
     ]
     #L = find_word_list(f'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Anglizismen')
 
@@ -68,23 +94,14 @@ if __name__ == "__main__":
         base = str(url.split('/')[-1])
         print(url)
         L = find_word_list(url)
-        target = []
-        for i in range(4, 30):
-            try:
-                word_list = [
-                    item.get_text().lower() for item in L[i] if 
-                    '–' not in str(item.get_text()) and '-' not in str(item.get_text()) and 
-                    str(item.get_text()) != '\n' and len(item.get_text()) > 3
-                    ]
-                
-                target += word_list
-            except IndexError:
-                break
-
+        target = get_words_word_list(L)
         if len(target) > 1:
             wiktionary[base] = target
         else:
-            print(target)
+            L = find_word_list_other(url)
+            target = [w.get_text() for w in L]
+            if len(target) > 1:
+                wiktionary[base] = target
 
 pprint(wiktionary)
 print(list(wiktionary.keys()))
