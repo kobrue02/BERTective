@@ -2,6 +2,7 @@ import json
 import nltk
 import os
 import pandas as pd
+import pickle
 import numpy as np
 import sys
 current = os.path.dirname(os.path.realpath(__file__))
@@ -30,6 +31,14 @@ class WiktionaryModel:
         
 
     def __build_matrix(self):
+        """
+        for each DataObject in the corpus, the text is tokenized
+        and matched with the wiktionary lexicon entries.
+        the matches are stored in arrays.
+        
+        :returns: a dictionary which has the DataObject IDs as keys
+        and the generated vectors as values.
+        """
         print("BUILDING WIKTIONARY MATRIX")
         matrix = {}
         for obj in tqdm(self.data.corpus):
@@ -48,6 +57,11 @@ class WiktionaryModel:
         return matrix
     
     def __to_df(self):
+        """
+        turns a wiktionary matrix into a pandas dataframe.
+    	this dataframe can be stored locally and re-read.
+        :returns: dataframe representing the wiktionary matrix.
+        """
 
         df = pd.DataFrame()
 
@@ -59,6 +73,10 @@ class WiktionaryModel:
         return df
     
     def __to_vector(self, dist: dict) -> np.array:
+        """
+        turns a dictionary containing wiktionary matches into a vector. 
+
+        :returns: numpy array with n dimensions where n is the amount of wiktionary lexicon entries. """
         vector = []
 
         for key in list(dist.keys()):
@@ -68,18 +86,42 @@ class WiktionaryModel:
         return np.array(vector)
 
     def __read_parquet(self, path: str):
+        """ 
+        read the pandas dataframe representation of a
+        wiktionary matrix which was stored locally in 
+        a parquet file.
+        :param path:  the path to the parquet file.
+        """
         df = pd.read_parquet(path)
         return df
     
     def __vectors_from_df(self):
+        """
+        turns the columns of a dataframe into n-dimensional vectors where
+        n is the amount of columns (ID not included).
+
+        :returns: dictionary which has DataObject ID as keys and vectors as values.
+        """
+
+        # if vectors have been generated before
+        vectors_exist = os.path.isfile('vectors/wiktionary.pickle')
+        if vectors_exist:
+            print("LOADING VECTORS")
+            with open('vectors/wiktionary.pickle', 'rb') as f:
+                vectors = pickle.load(f)
+                return vectors
+
+        print("No vector database found, building new one.")
+        # if file does not exist, build from scratch
         vectors = {}
         columns = self.df_matrix.columns.values.tolist()[1:]
         for i in tqdm(range(len(self.df_matrix.index))):
-            vector = []
-            for col in columns:
-                vector.append(self.df_matrix[col].tolist()[i])
+            vector = [self.df_matrix[col].tolist()[i] for col in columns]
             vectors[i] = vector
         
+        with open('vectors/wiktionary.pickle', 'wb') as f:
+            pickle.dump(vectors, f, protocol=pickle.HIGHEST_PROTOCOL)
+        print('Saved vector database to file.')
         return vectors
     
     def __getitem__(self, i):
