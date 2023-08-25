@@ -2,9 +2,11 @@ from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
 from models.zdl_vector_model import AREAL_DICT
 from models.wiktionary_matrix import WiktionaryModel
+
 from tqdm import tqdm
 from langdetect import detect, DetectorFactory, lang_detect_exception
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, BayesianRidge, SGDRegressor
+from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.svm import SVR
 from sklearn.model_selection import train_test_split
@@ -12,6 +14,7 @@ from sklearn.metrics import classification_report
 
 import argparse
 import json
+import matplotlib.pyplot as plt
 import nltk
 import os
 import pandas as pd
@@ -19,14 +22,19 @@ import random
 import time
 
 def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
+    """ finds reddit files and adds them to a DataCorpus """
     directory_in_str = f"{path}/reddit/locales"
     directory = os.fsencode(directory_in_str)
+
+    # iterating over all files in the directory
     for file in tqdm(os.listdir(directory)):
         filename = os.fsdecode(file)
         if filename.endswith(".json"): 
+            # json files contain reddit data
             with open(f"{directory_in_str}/{filename}", "r") as f:
                 file_data = json.load(f)
                 for key in AREAL_DICT.keys():
+                    # find the areal to which the city belongs
                     if filename.split(".")[0] in AREAL_DICT[key]:
                         for item in file_data["data"]:
                             text = item['selftext']
@@ -68,6 +76,8 @@ def check_text_is_german(text: str) -> bool:
         
     return lang == "de"
 
+def __build_corpus(data: DataCorpus) -> DataCorpus:
+    data = __reddit_to_datacorpus(PATH, data)
 
 if __name__ == "__main__":
 
@@ -94,8 +104,8 @@ if __name__ == "__main__":
     #data.save_to_avro(f"{PATH}/corpus.avro")
     #time.sleep(2)
     
-    wiktionary_matrix = WiktionaryModel(data)
-    #wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
+    #wiktionary_matrix = WiktionaryModel(source=data)
+    wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
     #print(wiktionary_matrix.vectors)
 
     ids_ = []
@@ -110,19 +120,28 @@ if __name__ == "__main__":
     X = [wiktionary_matrix[id] for id in ids_]
 
     X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, random_state=42, stratify=y)
+                X, y, test_size=0.1, random_state=42, stratify=y)
 
-    model = SVR()
+
+
+
+    model = KNeighborsRegressor(
+        weights='distance', 
+        n_neighbors=14)
     model.fit(X_train, y_train)
 
     y_pred = model.predict(X_test)
 
     offset = 0
-    for i in zip(y_test, y_pred):
-        print(i)
-        offset += (abs(i[0] - i[1]))
-    print('-'*64)
-    print(offset / len(y_test))
+    for j in zip(y_test, y_pred):
+        offset += (abs(j[0] - int(j[1])))
+        avg = offset / len(y_test)
+    print(avg)
+    
+    #plt.plot(y_test)
+    #plt.plot(y_pred, 'o')
+
+    #plt.show()
 
     #print(classification_report(y_test, y_pred))
     
