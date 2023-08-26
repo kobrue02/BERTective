@@ -2,12 +2,18 @@ from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
 from models.zdl_vector_model import AREAL_DICT
 from models.wiktionary_matrix import WiktionaryModel
+from models.keras_cnn_implementation import build_cnn_model
 
 from tqdm import tqdm
 from langdetect import detect, DetectorFactory, lang_detect_exception
+from keras.backend import clear_session
+
+
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LogisticRegression, BayesianRidge, SGDRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVR
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
@@ -16,12 +22,13 @@ import argparse
 import json
 import matplotlib.pyplot as plt
 import nltk
+import numpy as np
 import os
 import pandas as pd
 import random
 import time
 
-def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
+def __reddit_locales_to_datacorpus(path: str, corpus: DataCorpus):
     """ finds reddit files and adds them to a DataCorpus """
     directory_in_str = f"{path}/reddit/locales"
     directory = os.fsencode(directory_in_str)
@@ -48,14 +55,43 @@ def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
     return corpus
     
 def __achgut_to_datacorpus(path: str, corpus: DataCorpus):
+    """ reads achgut blog posts and adds to DataCorpus """
     achse = pd.read_parquet(f'{path}/achse/achse_des_guten_annotated_items.parquet')
 
-    for item in zip(achse.content, achse.age, achse.sex):
+    for item in zip(achse.content, achse.age, achse.sex): #, achse.education, achse.regiolect):
         obj = DataObject(
             text = item[0],
             author_age=item[1],
             author_gender=item[2],
-            source="ACHGUT"
+            source="ACHGUT")
+            #author_education=item[3],
+            #author_regiolect=item[4],
+            
+        #)
+
+        corpus.add_item(obj)
+
+    return corpus
+
+def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
+    """ 
+    reads reddit posts and adds to DataCorpus 
+    :param path: path to parquest file with annotated posts
+    :param corpus: DataCorpus object to append data to
+    """
+    reddit = pd.read_parquet(f'{path}/reddit/annotated_posts.parquet')
+
+    for item in zip(reddit.content, reddit.age, reddit.sex, reddit.regiolect):
+        try:
+            regiolect = item[3]
+        except IndexError:
+            regiolect = None
+        obj = DataObject(
+            text = item[0],
+            author_age=item[1],
+            author_gender=item[2],
+            author_regiolect=regiolect,
+            source="REDDIT"
         )
 
         corpus.add_item(obj)
@@ -76,8 +112,16 @@ def check_text_is_german(text: str) -> bool:
         
     return lang == "de"
 
-def __build_corpus(data: DataCorpus) -> DataCorpus:
+def __build_corpus(data: DataCorpus, PATH: str) -> DataCorpus:
+    print("loading reddit data from locales")
+    data = __reddit_locales_to_datacorpus(PATH, data)
+    print("loading achgut data")
+    data = __achgut_to_datacorpus(PATH, data)
+    print("loading reddit data from miscellaneous")
     data = __reddit_to_datacorpus(PATH, data)
+    return data
+
+
 
 if __name__ == "__main__":
 
@@ -94,44 +138,88 @@ if __name__ == "__main__":
         wiktionary: dict = json.load(f)
 
     data = DataCorpus()
-    data.read_avro(f'{PATH}/corpus.avro')
-    length = len(data)
-    print(length)
-    #corpus = __reddit_to_datacorpus(PATH, data)
-    #length = len(data)
-    #corpus = __achgut_to_datacorpus(PATH, data)
-    #print(length)
+
+    # if we want to build corpus
+    #data = __build_corpus(data, PATH)
     #data.save_to_avro(f"{PATH}/corpus.avro")
-    #time.sleep(2)
+
+    # read existing corpus
+    data.read_avro(f'{PATH}/corpus.avro')
     
+
     #wiktionary_matrix = WiktionaryModel(source=data)
     wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
-    #print(wiktionary_matrix.vectors)
+    #wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
+    
 
     ids_ = []
 
     for item in data.corpus:
-        if item.source == "ACHGUT":
-            ids_.append(item.content['id'])
+        if item.source in ("ACHGUT", "REDDIT"):
+            if item.author_regiolect not in ("NONE", "", None):
+                ids_.append(item.content['id'])
         else:
             break
 
-    y = [float(data[id].author_age) for id in ids_]
+    y = [data[id].author_regiolect for id in ids_]
     X = [wiktionary_matrix[id] for id in ids_]
 
+    X = np.asarray(X)
+    y = np.asarray(y)
+    
+    n_inputs, n_outputs = 27, 7
+
     X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.1, random_state=42, stratify=y)
+                X, y, test_size=0.2, random_state=42, stratify=y)
+    
+    print(list(set(y_train)))
 
+    def to_num(L: list) -> list:
+        a = {
+            "DE-MIDDLE-EAST": 1.0,
+            "DE-MIDDLE-WEST": 2.0,
+            "DE-NORTH-EAST": 3.0,
+            "DE-NORTH-WEST": 4.0,
+            "DE-SOUTH-EAST": 5.0,
+            "DE-SOUTH-WEST": 6.0
+            }
+        return [a[item] for item in L]
+    
+    y_train = np.asarray(to_num(y_train))
+    y_test = np.asarray(to_num(y_test))
+    
 
+    clear_session()
+    model = build_cnn_model(n_inputs, n_outputs)
+    print(model.summary())
 
+    history = model.fit(X_train, y_train, 
+                        epochs=100, 
+                        verbose=True, 
+                        validation_data=(X_test, y_test), 
+                        batch_size=16,
+                        use_multiprocessing=True,
+                        workers=6)
 
-    model = KNeighborsRegressor(
-        weights='distance', 
-        n_neighbors=14)
+    loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
+    print("Training Accuracy: {:.4f}".format(accuracy))
+    loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
+    print("Testing Accuracy:  {:.4f}".format(accuracy))
+    exit()
+
+    #model = MLPClassifier()
+    # for regression
+    #model = KNeighborsRegressor(
+    #    weights='distance', 
+    #    n_neighbors=14)
+
     model.fit(X_train, y_train)
 
     y_pred = model.predict(X_test)
 
+    print(classification_report(y_test, y_pred))
+
+    exit()
     offset = 0
     for j in zip(y_test, y_pred):
         offset += (abs(j[0] - int(j[1])))
