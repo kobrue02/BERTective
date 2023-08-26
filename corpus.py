@@ -95,7 +95,8 @@ class DataCorpus:
                                                     "DE-MIDDLE-EAST",
                                                     "DE-SOUTH-WEST",
                                                     "DE-SOUTH-EAST",
-                                                    "NONE"]:
+                                                    "NONE",
+                                                    ""]:
             return False
         
         if not item.content['author_education'] in ["finished_highschool",
@@ -103,7 +104,8 @@ class DataCorpus:
                                                     "has_bachelor",
                                                     "has_master",
                                                     "has_phd",
-                                                    "apprentice",
+                                                    "is_apprentice",
+                                                    "has_apprentice",
                                                     "NONE"]:
             return False
 

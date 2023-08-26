@@ -23,7 +23,10 @@ def get_gender_from_str(input_str: str) -> str:
     """ finds gender tag in string """
     search = re.search(r"(m|M|f|F)", input_str)
     if search:
-        return search.group(0).upper()
+        if search.group(0).upper() == "M":
+            return "male"
+        else:
+            return "female"
     else:
         return "N/A"
     
@@ -109,6 +112,6 @@ if __name__ == "__main__":
     data: pd.DataFrame = pd.concat(datasets)
     print(data.head())
     print(len(data.index))
-    print(list(set(data.regiolect.tolist())))
+    print(list(set(data.sex.tolist())))
 
     data.to_parquet('test/reddit/annotated_posts.parquet')
