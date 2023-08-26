@@ -116,7 +116,7 @@ class WiktionaryModel:
         vectors = {}
         columns = self.df_matrix.columns.values.tolist()[1:]
         for i in tqdm(range(len(self.df_matrix.index))):
-            vector = [self.df_matrix[col].tolist()[i] for col in columns]
+            vector = np.array([self.df_matrix[col].tolist()[i] for col in columns])
             vectors[i] = vector
         
         with open('vectors/wiktionary.pickle', 'wb') as f:
