@@ -43,11 +43,13 @@ def get_age_and_sex(url: str):
     try:
         age = data["authors"][author]["age"]
         sex = data["authors"][author]["sex"]
+        education = data["authors"][author]["education"]
+        regiolect = data["authors"][author]["regiolect"]
 
     except KeyError:
-        age, sex = None, None
+        age, sex, regiolect, education = None, None, None, None
         
-    return age, sex, content
+    return age, sex, education, regiolect, content
 
 def get_all_articles():
     with open("data/achse/achse_des_guten.json", "w") as f:
@@ -91,9 +93,9 @@ def run(path: str):
     achse_dict = {}
     i = 0
     for url in tqdm(urls["urls"]):
-        age, sex, content = get_age_and_sex(url)
-        if any([age, sex]):
-            achse_dict[f"txt {i}"] = {"content": content, "age": age, "sex": sex}
+        age, sex, education, regiolect, content = get_age_and_sex(url)
+        if any([age, sex, education, regiolect]):
+            achse_dict[f"txt {i}"] = {"content": content, "age": age, "sex": sex, "education": education, "regiolect": regiolect}
             i += 1
 
     achse_df = pd.DataFrame.from_dict(achse_dict).transpose()
@@ -103,4 +105,4 @@ def run(path: str):
 
 if __name__ == "__main__":
 
-    run()
+    run('test')
