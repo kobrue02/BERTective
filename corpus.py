@@ -106,7 +106,8 @@ class DataCorpus:
                                                     "has_phd",
                                                     "is_apprentice",
                                                     "has_apprentice",
-                                                    "NONE"]:
+                                                    "NONE",
+                                                    ""]:
             return False
 
         if not isinstance(item.content['source'], str):

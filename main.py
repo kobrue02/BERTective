@@ -58,16 +58,14 @@ def __achgut_to_datacorpus(path: str, corpus: DataCorpus):
     """ reads achgut blog posts and adds to DataCorpus """
     achse = pd.read_parquet(f'{path}/achse/achse_des_guten_annotated_items.parquet')
 
-    for item in zip(achse.content, achse.age, achse.sex): #, achse.education, achse.regiolect):
+    for item in zip(achse.content, achse.age, achse.sex, achse.education, achse.regiolect):
         obj = DataObject(
             text = item[0],
             author_age=item[1],
             author_gender=item[2],
-            source="ACHGUT")
-            #author_education=item[3],
-            #author_regiolect=item[4],
-            
-        #)
+            source="ACHGUT",
+            author_education=item[3],
+            author_regiolect=item[4])
 
         corpus.add_item(obj)
 
@@ -155,19 +153,22 @@ if __name__ == "__main__":
     ids_ = []
 
     for item in data.corpus:
-        if item.source in ("ACHGUT", "REDDIT"):
-            if item.author_regiolect not in ("NONE", "", None):
+        if item.source in ("REDDIT"):
+            if item.author_regiolect not in ("N/A", "NONE", "", None):
                 ids_.append(item.content['id'])
         else:
-            break
+            continue
 
     y = [data[id].author_regiolect for id in ids_]
     X = [wiktionary_matrix[id] for id in ids_]
 
-    X = np.asarray(X)
+    X = np.asarray(X).reshape(-1, 27, 1)
     y = np.asarray(y)
     
-    n_inputs, n_outputs = 27, 7
+    for item in list(set(y)):
+        print(f"{item.upper()}: {list(y).count(item)}")
+
+    n_inputs, n_outputs = 27, y.shape[0]
 
     X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.2, random_state=42, stratify=y)
@@ -175,6 +176,7 @@ if __name__ == "__main__":
     print(list(set(y_train)))
 
     def to_num(L: list) -> list:
+
         a = {
             "DE-MIDDLE-EAST": 1.0,
             "DE-MIDDLE-WEST": 2.0,
@@ -183,7 +185,21 @@ if __name__ == "__main__":
             "DE-SOUTH-EAST": 5.0,
             "DE-SOUTH-WEST": 6.0
             }
-        return [a[item] for item in L]
+        
+        b = {"finished_highschool": 1.0,
+             "has_phd": 2.0,
+             "has_apprentice": 3.0,
+             "has_master": 4.0}
+
+        c = {"female": 1.0,
+             "male": 2.0}
+        
+        if L[0] in list(a.keys()):
+            return [a[item] for item in L]
+        elif L[0] in list(b.keys()):
+            return [b[item] for item in L]
+        else: 
+            return [c[item] for item in L]
     
     y_train = np.asarray(to_num(y_train))
     y_test = np.asarray(to_num(y_test))
@@ -194,10 +210,10 @@ if __name__ == "__main__":
     print(model.summary())
 
     history = model.fit(X_train, y_train, 
-                        epochs=100, 
+                        epochs=256, 
                         verbose=True, 
                         validation_data=(X_test, y_test), 
-                        batch_size=16,
+                        batch_size=128,
                         use_multiprocessing=True,
                         workers=6)
 
