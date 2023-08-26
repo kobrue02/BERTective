@@ -29,7 +29,6 @@ from sklearn.tree import export_graphviz
 
 import seaborn as sns
 from tqdm import tqdm
-import tensorflow as tf
 
 AREAL_DICT = {
               "DE-NORTH-EAST": ["Rostock", "Berlin","luebeck", "Potsdam"],
@@ -250,16 +249,6 @@ class ZDLVectorModel:
         sns.heatmap(pd.DataFrame(report).iloc[:-1, :].T, annot=True, cmap="Greens")
         plt.show()
 
-def call_keras_model(X_train, X_test, y_train, y_test):
-    from models.keras_cnn_implementation import model, batch_size, epochs
-    X_train = tf.stack(X_train)
-    X_test = tf.stack(X_test)
-    model.fit(X_train, y_train, batch_size=batch_size, epochs=epochs, validation_data=(X_test,y_test))
-    print(model.summary())
-    y_pred = model.predict(X_test)
-    y_pred = np.round(y_pred)
-    report = classification_report(y_test, y_pred)
-    print(report)
 
 if __name__ == "__main__":
 
