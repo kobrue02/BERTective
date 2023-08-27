@@ -17,10 +17,19 @@ class WiktionaryModel:
 
     def __init__(self, path: str = None, source: DataCorpus = None) -> None:
 
+        """
+        Generate wiktionary feature vectors based on the word lists that have been crawled.
+        Vectors are stored with the ID of the DataObject they represent.
+        :param path: if matrix has been generated previously, it can be loaded
+        :param source: DataCorpus object
+        """
+
+        # if path is passed, try to load parquet file
         if path:
             self.df_matrix: pd.DataFrame = self.__read_parquet(path)
             self.vectors = self.__vectors_from_df()
         
+        # otherwise build matrix from scratch using wiktionary file
         else:
             self.data: DataCorpus = source
             with open('data/wiktionary/wiktionary.json', 'r', encoding='utf-8') as f:
@@ -106,7 +115,7 @@ class WiktionaryModel:
         # if vectors have been generated before
         vectors_exist = os.path.isfile('vectors/wiktionary.pickle')
         if vectors_exist:
-            print("LOADING VECTORS")
+            print("LOADING WIKTIONARY VECTORS")
             with open('vectors/wiktionary.pickle', 'rb') as f:
                 vectors = pickle.load(f)
                 return vectors
