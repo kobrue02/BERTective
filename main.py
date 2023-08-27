@@ -1,8 +1,9 @@
 from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
-from models.zdl_vector_model import AREAL_DICT
+from models.zdl_vector_model import AREAL_DICT, ZDLVectorMatrix
 from models.wiktionary_matrix import WiktionaryModel
-from models.keras_cnn_implementation import build_cnn_model
+from models.keras_cnn_implementation import multi_class_prediction_model, binary_prediction_model
+from models.keras_regresssor_implementation import build_regressor
 
 from tqdm import tqdm
 from langdetect import detect, DetectorFactory, lang_detect_exception
@@ -15,7 +16,7 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVR
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score, KFold
 from sklearn.metrics import classification_report
 
 import argparse
@@ -28,8 +29,14 @@ import pandas as pd
 import random
 import time
 
-def __reddit_locales_to_datacorpus(path: str, corpus: DataCorpus):
-    """ finds reddit files and adds them to a DataCorpus """
+def __reddit_locales_to_datacorpus(path: str = "data", corpus: DataCorpus = None):
+    """ 
+    finds all files in the reddit locale folder and adds them to a DataCorpus 
+    :param path: defaults to data. can be changed to something else for testing, e.g. 'test'
+    :param corpus: a DataCorpus object to which the data will be appended 
+    :returns: the DataCorpus object with the added reddit data 
+    """
+
     directory_in_str = f"{path}/reddit/locales"
     directory = os.fsencode(directory_in_str)
 
@@ -73,7 +80,8 @@ def __achgut_to_datacorpus(path: str, corpus: DataCorpus):
 
 def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
     """ 
-    reads reddit posts and adds to DataCorpus 
+    reads reddit posts from annotated parquet file
+    and adds to DataCorpus 
     :param path: path to parquest file with annotated posts
     :param corpus: DataCorpus object to append data to
     """
@@ -119,6 +127,36 @@ def __build_corpus(data: DataCorpus, PATH: str) -> DataCorpus:
     data = __reddit_to_datacorpus(PATH, data)
     return data
 
+def to_num(L: list) -> list:
+    """ turns string labels into float """
+    a = {
+        "DE-MIDDLE-EAST": 0.0,
+        "DE-MIDDLE-WEST": 1.0,
+        "DE-NORTH-EAST": 2.0,
+        "DE-NORTH-WEST": 3.0,
+        "DE-SOUTH-EAST": 4.0,
+        "DE-SOUTH-WEST": 5.0
+        }
+        
+    b = {
+        "finished_highschool": 0.0,
+        "has_phd": 1.0,
+        "has_apprentice": 2.0,
+        "has_master": 3.0
+        }
+
+    c = {
+        "female": 0.0,
+        "male": 1.0
+        }
+        
+    if L[0] in list(a.keys()):
+        return [a[item] for item in L]
+    elif L[0] in list(b.keys()):
+        return [b[item] for item in L]
+    else: 
+        return [c[item] for item in L]
+
 
 
 if __name__ == "__main__":
@@ -149,78 +187,83 @@ if __name__ == "__main__":
     wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
     #wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
     
-
+    vectionary = ZDLVectorMatrix(source=data)
+    vectionary.save_to_json()
+    print(vectionary)
+    exit()
     ids_ = []
 
     for item in data.corpus:
-        if item.source in ("REDDIT"):
-            if item.author_regiolect not in ("N/A", "NONE", "", None):
+        if item.source in ("ACHGUT"):
+            if item.author_education not in ("N/A", "NONE", "", 0, "0", None):
                 ids_.append(item.content['id'])
         else:
             continue
 
-    y = [data[id].author_regiolect for id in ids_]
+    y = [data[id].author_education for id in ids_]
     X = [wiktionary_matrix[id] for id in ids_]
 
-    X = np.asarray(X).reshape(-1, 27, 1)
+    X = np.asarray(X) #.reshape(-1, 27, 1)
     y = np.asarray(y)
     
     for item in list(set(y)):
-        print(f"{item.upper()}: {list(y).count(item)}")
+        print(f"{item}: {list(y).count(item)}")
 
     n_inputs, n_outputs = 27, y.shape[0]
 
     X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.2, random_state=42, stratify=y)
-    
     print(list(set(y_train)))
 
-    def to_num(L: list) -> list:
-
-        a = {
-            "DE-MIDDLE-EAST": 1.0,
-            "DE-MIDDLE-WEST": 2.0,
-            "DE-NORTH-EAST": 3.0,
-            "DE-NORTH-WEST": 4.0,
-            "DE-SOUTH-EAST": 5.0,
-            "DE-SOUTH-WEST": 6.0
-            }
-        
-        b = {"finished_highschool": 1.0,
-             "has_phd": 2.0,
-             "has_apprentice": 3.0,
-             "has_master": 4.0}
-
-        c = {"female": 1.0,
-             "male": 2.0}
-        
-        if L[0] in list(a.keys()):
-            return [a[item] for item in L]
-        elif L[0] in list(b.keys()):
-            return [b[item] for item in L]
-        else: 
-            return [c[item] for item in L]
     
+    # if predicting string classes (regiolect, gender, education)
     y_train = np.asarray(to_num(y_train))
     y_test = np.asarray(to_num(y_test))
     
 
     clear_session()
-    model = build_cnn_model(n_inputs, n_outputs)
-    print(model.summary())
 
-    history = model.fit(X_train, y_train, 
-                        epochs=256, 
-                        verbose=True, 
-                        validation_data=(X_test, y_test), 
-                        batch_size=128,
-                        use_multiprocessing=True,
-                        workers=6)
+    ### BINARY PREDICTION (e.g. gender)
 
-    loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
-    print("Training Accuracy: {:.4f}".format(accuracy))
-    loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
-    print("Testing Accuracy:  {:.4f}".format(accuracy))
+    def binary():
+        model = binary_prediction_model(n_inputs)
+        print(model.summary())
+
+        history = model.fit(X_train, y_train, 
+                            epochs=256, 
+                            verbose=True, 
+                            validation_data=(X_test, y_test), 
+                            batch_size=32,
+                            use_multiprocessing=True,
+                            workers=6)
+
+        loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
+        print("Training Accuracy: {:.4f}".format(accuracy))
+        loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
+        print("Testing Accuracy:  {:.4f}".format(accuracy))
+
+    # binary()
+
+    ### MULTI CLASS
+
+    def multiclass():
+        model = multi_class_prediction_model(n_inputs, n_outputs)
+        print(model.summary())
+
+        history = model.fit(X_train, y_train, 
+                            epochs=256, 
+                            verbose=True, 
+                            validation_data=(X_test, y_test), 
+                            batch_size=128,
+                            use_multiprocessing=True,
+                            workers=6)
+
+        loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
+        print("Training Accuracy: {:.4f}".format(accuracy))
+        loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
+        print("Testing Accuracy:  {:.4f}".format(accuracy))
+
+    multiclass()    
     exit()
 
     #model = MLPClassifier()

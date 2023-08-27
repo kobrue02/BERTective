@@ -4,8 +4,7 @@ import sys
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
-
-
+from corpus import DataCorpus, DataObject
 from german_stopwords import stopwords_
 from scraping_tools.zdl_regio_client import zdl_request, tokenize
 
@@ -99,12 +98,14 @@ class ZDLVectorModel:
 
         return model
 
-    def __json_to_vector(self, response: dict) -> np.array:
+    @staticmethod
+    def _json_to_vector(response: dict) -> np.array:
         """ turns the ZDL response into a 6d vector """
         ppm_values = [item["ppm"] for item in response]
         return np.array(ppm_values)
 
-    def __vectorize_sample(self, text: str) -> np.array:
+    @staticmethod
+    def _vectorize_sample(text: str, vectionary: dict) -> np.array:
         """ tokenizes and vectorizes a text sample using ZDL regionalkorpus """
         vectors = []
         text = text.replace("\n", "") 
@@ -119,18 +120,18 @@ class ZDLVectorModel:
             if token in stopwords_:
                 continue
             # if token has not been called yet, do api call
-            if token not in self.vector_dict:
+            if token not in vectionary:
                 try:
                     r = zdl_request(token)
                 except (requests.exceptions.JSONDecodeError, ValueError):
                     continue    # some words return no result
-                vector = self.__json_to_vector(r)
-                self.vector_dict[token] = vector.tolist()   # save the vector as a list (for json)
+                vector = ZDLVectorModel._json_to_vector(r)
+                vectionary[token] = vector.tolist()   # save the vector as a list (for json)
             else:
                 # else get vector from dict
-                vector = self.vector_dict[token]
-                tqdm.write('got vector from dict')
-            tqdm.write(str(vector))
+                vector = vectionary[token]
+                #tqdm.write('got vector from dict')
+            #tqdm.write(str(vector))
             vectors.append(vector)
         # keep only complete vectors
         return np.array([v for v in vectors if len(v) == 6])
@@ -217,7 +218,7 @@ class ZDLVectorModel:
                             dataframe_list.append(current_data)
 
         training_data = pd.concat(dataframe_list)
-        training_data["vector"] = [self.__vectorize_sample(text) for text in tqdm(training_data["texts"].tolist())]
+        training_data["vector"] = [self._vectorize_sample(text) for text in tqdm(training_data["texts"].tolist())]
         print(training_data.head())
         training_data.reset_index(inplace=True, drop=True)
         training_data.to_pickle("vectors/zdl_vector_matrix.pickle")
@@ -250,6 +251,45 @@ class ZDLVectorModel:
         plt.show()
 
 
+class ZDLVectorMatrix:
+
+    def __init__(self, source: DataCorpus = None, path: str = None) -> None:
+        """
+        a slightly buggy class which generates a vector matrix for a DataCorpus
+        :param source: DataCorpus object
+        :param path: if vectors have been stored as a json, they can be loaded
+        """
+        self.data: DataCorpus = source
+        with open('vectors/zdl_vector_dict.json', 'r', encoding='utf-8') as f:
+            self.vectionary: dict = json.load(f)
+        if path:
+            with open('data/vectors/ZDLCorpus_data.json', 'r') as f:
+                self.vectors = json.load(f)
+        else:
+            self.vectors = self.__vectorize_data()
+            
+    def __call_vectorizer(self, sample: str) -> np.array:
+        """
+        use vectorize  method from other class, passing the 
+        vector dict from this class to it
+        """
+        return ZDLVectorModel._vectorize_sample(sample, self.vectionary)
+    
+    def __vectorize_data(self):
+        print("BUILDING ZDL MATRIX")
+        matrix = {}
+        for obj in tqdm(self.data.corpus):
+            ID = obj.content['id']
+            V = self.__call_vectorizer(obj.text)
+            matrix[ID] = V
+
+        return matrix
+    
+    def save_to_json(self):
+        with open('data/vectors/ZDLCorpus_data.json', 'w') as f:
+            json.dump(self.vectors, f)
+
+
 if __name__ == "__main__":
 
     model = ZDLVectorModel(
@@ -273,7 +313,7 @@ if __name__ == "__main__":
     sample = """Moin in die Runde,
 
 ich hab auf meinem Balkon beobachtet, wie ab und zu Bienen in einen kleinen Spalt fliegen. Hab mir nichts dabei gedacht und es einfach mal zu geklebt. Das war im nach hinein ein fataler Fehler. Denn jetzt fliegen da etwa 30-40 Bienen herum, was vermuten lässt, dass da ein ganzes Nest hinter der nebenstehenden Holzverkleidung ist. Was kann man dazu in Bremen tun? Kammerjäger ist eigentlich keine Option, da die ja unter Naturschutz stehen und ich sie eher umsiedeln möchte. Kennt ihr vielleicht jemanden oder eine Idee was ich machen kann?"""
-    sample_vector = __vectorize_sample(sample)
+    sample_vector = _vectorize_sample(sample)
     sample_vector = __zero_pad_vector(sample_vector, maxVal)
     sample_vector = sample_vector.reshape(1, -1)
     print(model.predict_proba(sample_vector))
