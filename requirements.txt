@@ -10,3 +10,5 @@ nltk
 openai
 torch
 fastavro
+keras
+scikeras
