@@ -134,7 +134,7 @@ class ZDLVectorModel:
             #tqdm.write(str(vector))
             vectors.append(vector)
         # keep only complete vectors
-        return np.array([v for v in vectors if len(v) == 6])
+        return np.array([v for v in vectors if len(v) == 6]), vectionary
 
     def __find_longest_vector(self, data: pd.DataFrame) -> int:
         # for zero padding we need to know the length to which we want to pad
@@ -260,14 +260,19 @@ class ZDLVectorMatrix:
         :param path: if vectors have been stored as a json, they can be loaded
         """
         self.data: DataCorpus = source
-        with open('vectors/zdl_vector_dict.json', 'r', encoding='utf-8') as f:
-            self.vectionary: dict = json.load(f)
+
+        try:
+            with open('vectors/zdl_vector_dict.json', 'r', encoding='utf-8') as f:
+                self.vectionary: dict = json.load(f)
+        except (FileNotFoundError, json.decoder.JSONDecodeError) :
+            self.vectionary = {}
+
         if path:
             with open('data/vectors/ZDLCorpus_data.json', 'r') as f:
                 self.vectors = json.load(f)
         else:
             self.vectors = self.__vectorize_data()
-            
+
     def __call_vectorizer(self, sample: str) -> np.array:
         """
         use vectorize  method from other class, passing the 
@@ -278,10 +283,15 @@ class ZDLVectorMatrix:
     def __vectorize_data(self):
         print("BUILDING ZDL MATRIX")
         matrix = {}
-        for obj in tqdm(self.data.corpus):
+        for n, obj in enumerate(tqdm(self.data.corpus)):
             ID = obj.content['id']
-            V = self.__call_vectorizer(obj.text)
+            V, self.vectionary = self.__call_vectorizer(obj.text)
             matrix[ID] = V
+
+            # updating the json file every 2000 items
+            if n % 2000:
+                with open('vectors/zdl_vector_dict.json', 'w') as f:
+                    json.dump(self.vectionary, f)
 
         return matrix
     
