@@ -16,6 +16,8 @@ import os
 import pandas as pd
 import re
 import requests
+import spacy
+nlp = spacy.load('de_core_news_md')
 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -96,7 +98,7 @@ class ZDLVectorModel:
         model = self.classifier
         model.fit(self.X_train, self.y_train)
 
-        return model
+        return model  
 
     @staticmethod
     def _json_to_vector(response: dict) -> np.array:
@@ -109,29 +111,29 @@ class ZDLVectorModel:
         """ tokenizes and vectorizes a text sample using ZDL regionalkorpus """
         vectors = []
         text = text.replace("\n", "") 
-        punctuations = '''!()-[]{};:'"\,<>./?@#$%^&*_~'''
-        for x in text.lower(): 
-            if x in punctuations: 
-                text = text.replace(x, "") 
         text = re.sub(r'<.*?>', '', text)
         text = re.sub(r'https?://\S+|www\.\S+', '', text)
         tokens = tokenize(text) # tokenize the sample
         for token in tokens:
-            if token in stopwords_:
+            if token in stopwords_ or 'http' in token:
                 continue
             # if token has not been called yet, do api call
-            if token not in vectionary:
-                try:
-                    r = zdl_request(token)
-                except (requests.exceptions.JSONDecodeError, ValueError):
-                    continue    # some words return no result
-                vector = ZDLVectorModel._json_to_vector(r)
-                vectionary[token] = vector.tolist()   # save the vector as a list (for json)
-            else:
-                # else get vector from dict
+            if token in vectionary:
                 vector = vectionary[token]
-                #tqdm.write('got vector from dict')
-            #tqdm.write(str(vector))
+            elif token.lower() in vectionary:
+                vector = vectionary[token.lower()]
+            else:
+                lemma = nlp(token)[0].lemma_
+                if lemma in vectionary:
+                    vector = vectionary[lemma]
+                else:
+                    try:
+                        r = zdl_request(lemma)
+                    except (requests.exceptions.JSONDecodeError, ValueError):
+                        continue    # some words return no result
+                    vector = ZDLVectorModel._json_to_vector(r)
+                    vectionary[lemma] = vector.tolist()   # save the vector as a list (for json)
+
             vectors.append(vector)
         # keep only complete vectors
         return np.array([v for v in vectors if len(v) == 6]), vectionary
@@ -283,16 +285,19 @@ class ZDLVectorMatrix:
     def __vectorize_data(self):
         print("BUILDING ZDL MATRIX")
         matrix = {}
-        for n, obj in enumerate(tqdm(self.data.corpus)):
+        for n, obj in enumerate(tqdm(self.data)):
             ID = obj.content['id']
             V, self.vectionary = self.__call_vectorizer(obj.text)
             matrix[ID] = V
 
             # updating the json file every 2000 items
-            if n % 2000:
+            if n % 10 == 0:
+                tqdm.write('saving vectors')
                 with open('vectors/zdl_vector_dict.json', 'w') as f:
                     json.dump(self.vectionary, f)
 
+        with open('vectors/zdl_vector_dict.json', 'w') as f:
+                    json.dump(self.vectionary, f)
         return matrix
     
     def save_to_json(self):

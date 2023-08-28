@@ -177,14 +177,17 @@ class DataCorpus:
 
 
     def __getitem__(self, i):
-
-        try:
-            if self.corpus[i].content['id'] == i:
-                return self.corpus[i]
-            else:
-                raise ValueError("The data bank hasn't been indexed properly.")
-        except IndexError:
-            raise IndexError(f"The ID is out of range. Corpus contains {len(self)} items.")
+        
+        if isinstance(i, int):
+            try:
+                if self.corpus[i].content['id'] == i:
+                    return self.corpus[i]
+                else:
+                    raise ValueError("The data bank hasn't been indexed properly.")
+            except IndexError:
+                raise IndexError(f"The ID is out of range. Corpus contains {len(self)} items.")
+        elif isinstance(i, slice): 
+            return self.corpus[i.start:i.stop]
         
     
     def __len__(self):

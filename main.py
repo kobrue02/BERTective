@@ -181,15 +181,34 @@ if __name__ == "__main__":
 
     # read existing corpus
     data.read_avro(f'{PATH}/corpus.avro')
-    
 
     #wiktionary_matrix = WiktionaryModel(source=data)
     wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
     #wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
     
-    vectionary = ZDLVectorMatrix(source=data)
-    vectionary.save_to_json()
-    print(vectionary)
+    corpus_size = len(data)
+    print(f"{corpus_size} items in DataCorpus.")
+    dict_list: list[dict] = []
+    for k in range(0, int(corpus_size/10000)+1):
+
+        if k == 0:
+            start = 0
+        else:
+            start = k*10000 + 1
+        
+        end = (k+1) * 10000
+
+        if end > corpus_size:
+             end = corpus_size - 1
+        
+        sample_vectionary = ZDLVectorMatrix(source=data[start:end]).vectionary
+        print(sample_vectionary)
+        dict_list.append(sample_vectionary)
+        
+    vectionary = dict_list[0]
+    for sample in dict_list[1:]:
+        vectionary.update(sample)
+    
     exit()
     ids_ = []
 
