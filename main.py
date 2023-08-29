@@ -189,25 +189,31 @@ if __name__ == "__main__":
     corpus_size = len(data)
     print(f"{corpus_size} items in DataCorpus.")
     dict_list: list[dict] = []
+    vector_database = pd.DataFrame()
     for k in range(0, int(corpus_size/10000)+1):
-
+        tqdm.write('Batch {}'.format(k))
         if k == 0:
             start = 0
         else:
             start = k*10000 + 1
         
-        end = (k+1) * 10000
+        end = (k+1) * 10000 + 1
 
         if end > corpus_size:
              end = corpus_size - 1
         
-        sample_vectionary = ZDLVectorMatrix(source=data[start:end]).vectionary
-        print(sample_vectionary)
-        dict_list.append(sample_vectionary)
+        sample_vectors = ZDLVectorMatrix(source=data[start:end]).vectors
+        print(sample_vectors)
+        dict_list.append(sample_vectors)
+
+        vector_database['ID'] = [j for j in list(sample_vectors.keys())]
+        vector_database['embedding'] = [vectionary[j] for j in list(sample_vectors.keys())]
+        vector_database.to_parquet(f'vectors/zdl_word_embeddings_batch_{k}.parquet')
         
     vectionary = dict_list[0]
     for sample in dict_list[1:]:
         vectionary.update(sample)
+    
     
     exit()
     ids_ = []

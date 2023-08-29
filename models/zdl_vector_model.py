@@ -290,9 +290,8 @@ class ZDLVectorMatrix:
             V, self.vectionary = self.__call_vectorizer(obj.text)
             matrix[ID] = V
 
-            # updating the json file every 2000 items
+            # updating the json file every 10 items
             if n % 10 == 0:
-                tqdm.write('saving vectors')
                 with open('vectors/zdl_vector_dict.json', 'w') as f:
                     json.dump(self.vectionary, f)
 
