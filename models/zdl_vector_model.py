@@ -11,6 +11,8 @@ from scraping_tools.zdl_regio_client import zdl_request, tokenize
 import json
 from langdetect import detect, DetectorFactory, lang_detect_exception
 import matplotlib.pyplot as plt
+import multiprocessing
+import threading
 import numpy as np
 import os
 import pandas as pd
@@ -107,13 +109,15 @@ class ZDLVectorModel:
         return np.array(ppm_values)
 
     @staticmethod
-    def _vectorize_sample(text: str, vectionary: dict) -> np.array:
+    def _vectorize_sample(text: str, vectionary: dict, verbose: bool) -> np.array:
         """ tokenizes and vectorizes a text sample using ZDL regionalkorpus """
         vectors = []
         text = text.replace("\n", "") 
         text = re.sub(r'<.*?>', '', text)
         text = re.sub(r'https?://\S+|www\.\S+', '', text)
         tokens = tokenize(text) # tokenize the sample
+        if verbose:
+            tqdm.write('current item has {} tokens.'.format(str(len(tokens))))
         for token in tokens:
             if token in stopwords_ or 'http' in token:
                 continue
@@ -129,6 +133,8 @@ class ZDLVectorModel:
                 else:
                     try:
                         r = zdl_request(lemma)
+                        if verbose:
+                            tqdm.write('calling ZDL API as token "{}" has not been vectorized before.'.format(lemma))
                     except (requests.exceptions.JSONDecodeError, ValueError):
                         continue    # some words return no result
                     vector = ZDLVectorModel._json_to_vector(r)
@@ -255,14 +261,14 @@ class ZDLVectorModel:
 
 class ZDLVectorMatrix:
 
-    def __init__(self, source: DataCorpus = None, path: str = None) -> None:
+    def __init__(self, source: DataCorpus = None, path: str = None, verbose=False) -> None:
         """
         a slightly buggy class which generates a vector matrix for a DataCorpus
         :param source: DataCorpus object
         :param path: if vectors have been stored as a json, they can be loaded
         """
         self.data: DataCorpus = source
-
+        self.verbose = verbose
         try:
             with open('vectors/zdl_vector_dict.json', 'r', encoding='utf-8') as f:
                 self.vectionary: dict = json.load(f)
@@ -280,23 +286,63 @@ class ZDLVectorMatrix:
         use vectorize  method from other class, passing the 
         vector dict from this class to it
         """
-        return ZDLVectorModel._vectorize_sample(sample, self.vectionary)
+        return ZDLVectorModel._vectorize_sample(sample, self.vectionary, verbose=self.verbose)
     
     def __vectorize_data(self):
+
+        chunk_matrices = []
+        temporary_vectionaries = []
+
+        def __batch(__slice: slice):
+            batch_dict = {}
+            for n, obj in enumerate(tqdm(self.data[__slice])):
+                ID = obj.content['id']
+                V, _vectionary = self.__call_vectorizer(obj.text)
+                batch_dict[ID] = V
+            chunk_matrices.append(batch_dict)
+            temporary_vectionaries.append(_vectionary)
+        
         print("BUILDING ZDL MATRIX")
         matrix = {}
-        for n, obj in enumerate(tqdm(self.data)):
-            ID = obj.content['id']
-            V, self.vectionary = self.__call_vectorizer(obj.text)
-            matrix[ID] = V
 
-            # updating the json file every 10 items
-            if n % 10 == 0:
-                with open('vectors/zdl_vector_dict.json', 'w') as f:
-                    json.dump(self.vectionary, f)
+        cores = multiprocessing.cpu_count()
+        full_batch_length = len(self.data)
+        mp_batch_size = full_batch_length//cores
 
+        slices = []
+        for j in range(0,cores+1):
+            if j == 0:
+                k = 0
+            else:
+                k = 1
+
+            start = j*mp_batch_size+k
+            if j <= cores:
+                end = (j+1)*mp_batch_size
+            else:
+                end = None
+            slice_ = slice(start, end, 1)
+            slices.append(slice_)
+
+        processes: list[threading.Thread] = []
+
+        for SLICE in slices:
+            P = threading.Thread(target=__batch, args=(SLICE,))
+            processes.append(P)
+
+        for process in processes:
+            process.start()
+        for process in processes:
+            process.join()
+        
+        for temp in temporary_vectionaries:
+            self.vectionary.update(temp)
         with open('vectors/zdl_vector_dict.json', 'w') as f:
                     json.dump(self.vectionary, f)
+
+        for chunk in chunk_matrices:
+            matrix.update(chunk)
+
         return matrix
     
     def save_to_json(self):

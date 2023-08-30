@@ -16,7 +16,7 @@ def tokenize(sample: str) -> list:
     unique_tokens = list(set(nltk.word_tokenize(sample)))
     without_stop = [tok for tok in unique_tokens if tok.lower() not in stopwords]
     without_reddit = [tok for tok in without_stop if tok.lower() not in reddit_stopwords]
-    return [tok for tok in without_reddit if tok not in string.punctuation]
+    return [tok for tok in without_reddit if tok not in string.punctuation and len(tok) <= 25]
 
 def zdl_request(query: str, corpus: str = 'regional', by: str = 'areal', format: str = 'json'):
     zdl_base_url = "https://www.dwds.de/api/ppm"

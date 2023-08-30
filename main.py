@@ -22,6 +22,7 @@ from sklearn.metrics import classification_report
 import argparse
 import json
 import matplotlib.pyplot as plt
+import multiprocessing
 import nltk
 import numpy as np
 import os
@@ -203,11 +204,15 @@ if __name__ == "__main__":
         if end > corpus_size:
              end = corpus_size - 1
         
+        verbose = False
+        if k > 30:
+            verbose = True
+
         check_file = os.path.isfile(f'vectors/ZDL/zdl_word_embeddings_batch_{k}.parquet')
         if check_file:
             print('Batch was already vectorized, skipping to next.')
             continue
-        sample_vectors = ZDLVectorMatrix(source=data[start:end]).vectors
+        sample_vectors = ZDLVectorMatrix(source=data[start:end], verbose=verbose).vectors
         print(sample_vectors)
         dict_list.append(sample_vectors)
 
@@ -215,10 +220,13 @@ if __name__ == "__main__":
         # saving vectors as lists as parquet only supports 1d arrays 
         vector_database['embedding'] = [sample_vectors[j].tolist() for j in list(sample_vectors.keys())]
         vector_database.to_parquet(f'vectors/ZDL/zdl_word_embeddings_batch_{k}.parquet')
-        
-    vectionary = dict_list[0]
-    for sample in dict_list[1:]:
-        vectionary.update(sample)
+    
+    if dict_list:
+        vectionary = dict_list[0]
+        for sample in dict_list[1:]:
+            vectionary.update(sample)
+    else:
+        print('all batches have been vectorized.')
     
     
     exit()
