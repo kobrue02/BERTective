@@ -29,6 +29,7 @@ import os
 import pandas as pd
 import random
 import time
+import tensorflow as tf
 
 def __reddit_locales_to_datacorpus(path: str = "data", corpus: DataCorpus = None):
     """ 
@@ -159,6 +160,47 @@ def to_num(L: list) -> list:
         return [c[item] for item in L]
 
 
+def __build_zdl_vectors(data: DataCorpus):
+    corpus_size = len(data)
+    print(f"{corpus_size} items in DataCorpus.")
+    dict_list: list[dict] = []
+    batch_size = 1000
+    for k in range(0, int(corpus_size/batch_size)+1):
+        vector_database = pd.DataFrame()
+        tqdm.write('Vectorizing Batch {}'.format(k+1))
+        if k == 0:
+            start = 0
+        else:
+            start = k*batch_size + 1
+        
+        end = (k+1) * batch_size
+
+        if end > corpus_size:
+             end = corpus_size - 1
+        
+        verbose = False
+        if k > 30:
+            verbose = True
+
+        check_file = os.path.isfile(f'test/ZDL/zdl_word_embeddings_batch_{k}.parquet')
+        if check_file:
+            print('Batch was already vectorized, skipping to next.')
+            continue
+        sample_vectors = ZDLVectorMatrix(source=data[start:end], verbose=verbose).vectors
+        dict_list.append(sample_vectors)
+
+        for key in list(sample_vectors.keys()):
+            sample_vectors[key] = sample_vectors[key].tolist()
+
+        vector_database = pd.DataFrame(sample_vectors.items(), columns=['ID', 'embedding'])
+        vector_database.to_parquet(f'test/ZDL/zdl_word_embeddings_batch_{k}.parquet')
+    
+    if dict_list:
+        vectionary = dict_list[0]
+        for sample in dict_list[1:]:
+            vectionary.update(sample)
+    else:
+        print('all batches have been vectorized.')
 
 if __name__ == "__main__":
 
@@ -184,82 +226,80 @@ if __name__ == "__main__":
     data.read_avro(f'{PATH}/corpus.avro')
 
     #wiktionary_matrix = WiktionaryModel(source=data)
-    wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
+    #wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
     #wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
-    
-    corpus_size = len(data)
-    print(f"{corpus_size} items in DataCorpus.")
-    dict_list: list[dict] = []
-    vector_database = pd.DataFrame()
-    batch_size = 1000
-    for k in range(0, int(corpus_size/batch_size)+1):
-        tqdm.write('Vectorizing Batch {}'.format(k+1))
-        if k == 0:
-            start = 0
-        else:
-            start = k*batch_size + 1
-        
-        end = (k+1) * batch_size
 
-        if end > corpus_size:
-             end = corpus_size - 1
-        
-        verbose = False
-        if k > 30:
-            verbose = True
+    #__build_zdl_vectors(data=data)
+    
 
-        check_file = os.path.isfile(f'vectors/ZDL/zdl_word_embeddings_batch_{k}.parquet')
-        if check_file:
-            print('Batch was already vectorized, skipping to next.')
-            continue
-        sample_vectors = ZDLVectorMatrix(source=data[start:end], verbose=verbose).vectors
-        print(sample_vectors)
-        dict_list.append(sample_vectors)
+    directory_in_str = f"vectors/ZDL"
+    directory = os.fsencode(directory_in_str)
+    dataframe_list = []   
+    for file in tqdm(os.listdir(directory)):
+        filename = os.fsdecode(file)
+        if filename.endswith(".parquet"): 
+            temp = pd.read_parquet(f"{directory_in_str}/{filename}")
+            dataframe_list.append(temp)
+    
+    vector_database = pd.concat(dataframe_list)
+    
+    #print(np.array(vector_database[vector_database['ID'] == 146].embedding))
 
-        vector_database['ID'] = [j for j in list(sample_vectors.keys())]
-        # saving vectors as lists as parquet only supports 1d arrays 
-        vector_database['embedding'] = [sample_vectors[j].tolist() for j in list(sample_vectors.keys())]
-        vector_database.to_parquet(f'vectors/ZDL/zdl_word_embeddings_batch_{k}.parquet')
-    
-    if dict_list:
-        vectionary = dict_list[0]
-        for sample in dict_list[1:]:
-            vectionary.update(sample)
-    else:
-        print('all batches have been vectorized.')
-    
-    
-    exit()
     ids_ = []
 
-    for item in data.corpus:
-        if item.source in ("ACHGUT"):
-            if item.author_education not in ("N/A", "NONE", "", 0, "0", None):
+    for item in data:
+        if item.source in ("ACHGUT", "REDDIT"):
+            if item.author_regiolect not in ("N/A", "NONE", "", 0, "0", None):
                 ids_.append(item.content['id'])
         else:
             continue
 
-    y = [data[id].author_education for id in ids_]
-    X = [wiktionary_matrix[id] for id in ids_]
+    y = [data[id].author_regiolect for id in ids_]
+    #X = [wiktionary_matrix[id] for id in ids_]
+    X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
 
-    X = np.asarray(X) #.reshape(-1, 27, 1)
-    y = np.asarray(y)
+    maxVal = 0
+    for x in X:
+        x = np.array(x)
+        if len(x.shape) == 1:
+            continue
+        length = x.shape[1]
+        if length > maxVal:
+            maxVal = length
+    print(maxVal)
     
-    for item in list(set(y)):
-        print(f"{item}: {list(y).count(item)}")
+    for i in range(len(X)):
+        t = tf.convert_to_tensor(X[i], tf.float64)
+        if len(t.shape) == 3:
+            vector_length = t.shape[1]  # length of target vector
+            diff = maxVal - vector_length   # amount of padding needed
+            paddings = tf.constant([[0, 0], [0, diff], [0, 0]])
+            t = tf.pad(t, paddings, "CONSTANT")
+            
+        else:
+            t = tf.zeros([1, maxVal, 6], tf.float64)
+        X[i] = t
 
-    n_inputs, n_outputs = 27, y.shape[0]
+    #X = tf.stack(X) #.reshape(-1, 27, 1)
+    #y = tf.stack(y)
+    
+    #for item in list(set(y)):
+    #    print(f"{item}: {list(y).count(item)}")
 
     X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.2, random_state=42, stratify=y)
     print(list(set(y_train)))
-
     
     # if predicting string classes (regiolect, gender, education)
-    y_train = np.asarray(to_num(y_train))
-    y_test = np.asarray(to_num(y_test))
-    
+    y_train = tf.stack(to_num(y_train))
+    y_test = tf.stack(to_num(y_test))
 
+    X_train = tf.stack(X_train)
+    X_test = tf.stack(X_test)
+
+
+    n_inputs, n_outputs = X_train[0].shape, y_train.shape[0]
+    
     clear_session()
 
     ### BINARY PREDICTION (e.g. gender)
