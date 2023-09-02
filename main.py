@@ -2,7 +2,7 @@ from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
 from models.zdl_vector_model import AREAL_DICT, ZDLVectorMatrix
 from models.wiktionary_matrix import WiktionaryModel
-from models.keras_cnn_implementation import multi_class_prediction_model, binary_prediction_model
+from models.keras_cnn_implementation import *
 from models.keras_regresssor_implementation import build_regressor
 
 from tqdm import tqdm
@@ -10,12 +10,7 @@ from langdetect import detect, DetectorFactory, lang_detect_exception
 from keras.backend import clear_session
 
 
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LogisticRegression, BayesianRidge, SGDRegressor
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.neural_network import MLPClassifier
-from sklearn.svm import SVR
+from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split, cross_val_score, KFold
 from sklearn.metrics import classification_report
 
@@ -159,7 +154,6 @@ def to_num(L: list) -> list:
     else: 
         return [c[item] for item in L]
 
-
 def __build_zdl_vectors(data: DataCorpus):
     corpus_size = len(data)
     print(f"{corpus_size} items in DataCorpus.")
@@ -201,6 +195,35 @@ def __build_zdl_vectors(data: DataCorpus):
             vectionary.update(sample)
     else:
         print('all batches have been vectorized.')
+
+def __zero_pad(X: list, maxVal: int) -> list:
+
+    for i in range(len(X)):
+        t = tf.convert_to_tensor(X[i], tf.float64)
+        if len(t.shape) == 3:
+            vector_length = t.shape[1]  # length of target vector
+            diff = maxVal - vector_length   # amount of padding needed
+            paddings = tf.constant([[0, 0], [0, diff], [0, 0]])
+            t = tf.pad(t, paddings, "CONSTANT")
+            
+        else:
+            t = tf.zeros([1, maxVal, 6], tf.float64)
+        X[i] = t
+    
+    return X
+
+def __maxval(X: list) -> int:
+
+    maxVal = 0
+    for x in X:
+        x = np.array(x)
+        if len(x.shape) == 1:
+            continue
+        length = x.shape[1]
+        if length > maxVal:
+            maxVal = length
+
+    return maxVal
 
 if __name__ == "__main__":
 
@@ -258,33 +281,13 @@ if __name__ == "__main__":
     #X = [wiktionary_matrix[id] for id in ids_]
     X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
 
-    maxVal = 0
-    for x in X:
-        x = np.array(x)
-        if len(x.shape) == 1:
-            continue
-        length = x.shape[1]
-        if length > maxVal:
-            maxVal = length
-    print(maxVal)
-    
-    for i in range(len(X)):
-        t = tf.convert_to_tensor(X[i], tf.float64)
-        if len(t.shape) == 3:
-            vector_length = t.shape[1]  # length of target vector
-            diff = maxVal - vector_length   # amount of padding needed
-            paddings = tf.constant([[0, 0], [0, diff], [0, 0]])
-            t = tf.pad(t, paddings, "CONSTANT")
-            
-        else:
-            t = tf.zeros([1, maxVal, 6], tf.float64)
-        X[i] = t
+    X, y = shuffle(X, y)
 
-    #X = tf.stack(X) #.reshape(-1, 27, 1)
-    #y = tf.stack(y)
+    maxVal = __maxval(X)
+    X = __zero_pad(X, maxVal)
     
-    #for item in list(set(y)):
-    #    print(f"{item}: {list(y).count(item)}")
+    for item in list(set(y)):
+        print(f"{item}: {list(y).count(item)}")
 
     X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.2, random_state=42, stratify=y)
@@ -298,11 +301,29 @@ if __name__ == "__main__":
     X_test = tf.stack(X_test)
 
 
-    n_inputs, n_outputs = X_train[0].shape, y_train.shape[0]
-    
+    n_inputs, n_outputs = (1, 1933, 6), y_train.shape[0]
     clear_session()
 
+    def RNN():
+        model = rnn_model(n_inputs, n_outputs)
+        print(model.summary())
+
+        history = model.fit(X_train, y_train, 
+                            epochs=64, 
+                            verbose=True, 
+                            validation_data=(X_test, y_test), 
+                            batch_size=128,
+                            use_multiprocessing=True,
+                            workers=16)
+
+        loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
+        print("Training Accuracy: {:.4f}".format(accuracy))
+        loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
+        print("Testing Accuracy:  {:.4f}".format(accuracy))
+
     ### BINARY PREDICTION (e.g. gender)
+
+    RNN()
 
     def binary():
         model = binary_prediction_model(n_inputs)
@@ -330,12 +351,12 @@ if __name__ == "__main__":
         print(model.summary())
 
         history = model.fit(X_train, y_train, 
-                            epochs=256, 
+                            epochs=64, 
                             verbose=True, 
                             validation_data=(X_test, y_test), 
                             batch_size=128,
                             use_multiprocessing=True,
-                            workers=6)
+                            workers=16)
 
         loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
         print("Training Accuracy: {:.4f}".format(accuracy))
