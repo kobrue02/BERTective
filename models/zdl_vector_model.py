@@ -1,5 +1,6 @@
 # to import scraper from same-level subdirectory
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import sys
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
@@ -11,8 +12,9 @@ from scraping_tools.zdl_regio_client import zdl_request, tokenize
 import json
 from langdetect import detect, DetectorFactory, lang_detect_exception
 import matplotlib.pyplot as plt
-import multiprocessing
-import threading
+from multiprocessing import Process, Manager, cpu_count
+from threading import Thread
+import time
 import numpy as np
 import os
 import pandas as pd
@@ -279,33 +281,48 @@ class ZDLVectorMatrix:
             with open('data/vectors/ZDLCorpus_data.json', 'r') as f:
                 self.vectors = json.load(f)
         else:
-            self.vectors = self.__vectorize_data()
+            self.vectors = self._vectorize_data()
 
-    def __call_vectorizer(self, sample: str) -> np.array:
+    def _batch(self, __slice: slice):
+            __batch_dict = {}
+            for n, __obj in enumerate(tqdm(self.data[__slice])):
+                __ID = __obj.content['id']
+                #tqdm.write(str(__ID))
+                #tqdm.write(__obj.text)
+                __V, __vectionary = self._call_vectorizer(__obj.text)
+                __batch_dict[__ID] = __V
+                self._temporary_vectionaries.append(__vectionary)
+            
+            with self._lock:
+                self._chunk_matrices.append(__batch_dict)
+
+    def _call_vectorizer(self, sample: str) -> np.array:
         """
         use vectorize  method from other class, passing the 
         vector dict from this class to it
         """
         return ZDLVectorModel._vectorize_sample(sample, self.vectionary, verbose=self.verbose)
     
-    def __vectorize_data(self):
+    def _vectorize_data(self):
 
-        chunk_matrices = []
-        temporary_vectionaries = []
+        if len(self.data) < 128:
+            print('only using one cpu as amount of data is low.')
+            matrix = {}
+            for n, __obj in enumerate(tqdm(self.data)):
+                __ID = __obj.content['id']
+                __V, __vectionary = self._call_vectorizer(__obj.text)
+                matrix[__ID] = __V
+            return matrix
 
-        def __batch(__slice: slice):
-            batch_dict = {}
-            for n, obj in enumerate(tqdm(self.data[__slice])):
-                ID = obj.content['id']
-                V, _vectionary = self.__call_vectorizer(obj.text)
-                batch_dict[ID] = V
-            chunk_matrices.append(batch_dict)
-            temporary_vectionaries.append(_vectionary)
-        
+        manager = Manager()
+        self._chunk_matrices = manager.list()
+        self._temporary_vectionaries = manager.list()
+        self._lock = manager.Lock()
+
         print("BUILDING ZDL MATRIX")
         matrix = {}
 
-        cores = multiprocessing.cpu_count()
+        cores = cpu_count()
         full_batch_length = len(self.data)
         mp_batch_size = full_batch_length//cores
 
@@ -324,10 +341,10 @@ class ZDLVectorMatrix:
             slice_ = slice(start, end, 1)
             slices.append(slice_)
 
-        processes: list[threading.Thread] = []
+        processes: list[Thread] = []
 
         for SLICE in slices:
-            P = threading.Thread(target=__batch, args=(SLICE,))
+            P = Thread(target=self._batch, args=(SLICE, ))
             processes.append(P)
 
         for process in processes:
@@ -335,12 +352,12 @@ class ZDLVectorMatrix:
         for process in processes:
             process.join()
         
-        for temp in temporary_vectionaries:
+        for temp in self._temporary_vectionaries:
             self.vectionary.update(temp)
         with open('vectors/zdl_vector_dict.json', 'w') as f:
                     json.dump(self.vectionary, f)
 
-        for chunk in chunk_matrices:
+        for chunk in self._chunk_matrices:
             matrix.update(chunk)
 
         return matrix
@@ -352,29 +369,15 @@ class ZDLVectorMatrix:
 
 if __name__ == "__main__":
 
-    model = ZDLVectorModel(
-        read_pickle=True, 
-        classifier=MLPClassifier(),
-        locale_type='all')
-    model.evaluate()
+    sample = """Kennt ihr eine Tagesmutter in Stadtmitte oder im Kammgarnquartier/Textilviertel  empfehlen? 
 
-    exit()
+Ich suche für meinen dann 1 jährigen Sohn einen Betreuungsplatz bei einer Tagesmutter ab Sep 2023. In einer Krippe habe ich keinen Platz bekommen. Ich würde es bevorzugen, wenn die Tagesmutter ausgebildete Erzieherin ist. Ich bin aber auch offen für andere Tagesmütter, sofern es dann zumindest persönlich passt.
 
-    estimator = model.estimators_[0]
-    export_graphviz(estimator, out_file='tree.dot', 
-                feature_names = ["Vectors"] * 1560,
-                class_names = target_names,
-                rounded = True, proportion = False, 
-                precision = 2, filled = True)
+Die Tagesmütter sollte in der Stadtmitte oder im Kammgarnquartier/Textilviertel sein.
 
-    from subprocess import call
-    call(['dot', '-Tpng', 'tree.dot', '-o', 'tree.png', '-Gdpi=600'])
-
-    sample = """Moin in die Runde,
-
-ich hab auf meinem Balkon beobachtet, wie ab und zu Bienen in einen kleinen Spalt fliegen. Hab mir nichts dabei gedacht und es einfach mal zu geklebt. Das war im nach hinein ein fataler Fehler. Denn jetzt fliegen da etwa 30-40 Bienen herum, was vermuten lässt, dass da ein ganzes Nest hinter der nebenstehenden Holzverkleidung ist. Was kann man dazu in Bremen tun? Kammerjäger ist eigentlich keine Option, da die ja unter Naturschutz stehen und ich sie eher umsiedeln möchte. Kennt ihr vielleicht jemanden oder eine Idee was ich machen kann?"""
-    sample_vector = _vectorize_sample(sample)
-    sample_vector = __zero_pad_vector(sample_vector, maxVal)
-    sample_vector = sample_vector.reshape(1, -1)
-    print(model.predict_proba(sample_vector))
+Ich hoffe, es findet sich eine liebevolle Tagesmütter, die den Kleinen einen klaren Rahmen gibt, in dem sie lernen können."""
+    with open('vectors/zdl_vector_dict.json', 'r', encoding='utf-8') as f:
+        vectionary: dict = json.load(f)
+    sample_vector, _ = ZDLVectorModel._vectorize_sample(sample, vectionary, verbose=False)
+    print(sample_vector)
 
