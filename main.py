@@ -155,10 +155,22 @@ def to_num(L: list) -> list:
         return [c[item] for item in L]
 
 def __build_zdl_vectors(data: DataCorpus):
+    """
+    This function uses ZDLVectorMatrix to generate ZDL vectors for texts in a DataCorpus.\n
+    Each text will be tokenized, and each token gets embedded in a 6-dimensional vector.\n
+    The token vectors are stored in an ordered array. \n
+    So a ZDL vector representation of a text with 32 words will have this shape:\n
+    (1, 32, 6).
+    For model training, the vectors will be padded to the length of the longest document
+    in the DataCorpus.\n
+    The vectorization is performed in batches, and each batch's results will be stored in a 
+    PARQUET file.\n
+    :param data: DataCorpus object which contains labelled documents.
+    """
     corpus_size = len(data)
     print(f"{corpus_size} items in DataCorpus.")
-    dict_list: list[dict] = []
-    batch_size = 1000
+    dict_list: list[dict] = []  # will store dicts of format {ID: vector}
+    batch_size = 1000  # amount of items to be vectorized in one batch
     for k in range(0, int(corpus_size/batch_size)+1):
         vector_database = pd.DataFrame()
         tqdm.write('Vectorizing Batch {}'.format(k+1))
@@ -252,10 +264,10 @@ if __name__ == "__main__":
     #wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
     #wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
 
-    #__build_zdl_vectors(data=data)
+    __build_zdl_vectors(data=data)
     
 
-    directory_in_str = f"vectors/ZDL"
+    directory_in_str = f"test/ZDL"
     directory = os.fsencode(directory_in_str)
     dataframe_list = []   
     for file in tqdm(os.listdir(directory)):
@@ -309,7 +321,7 @@ if __name__ == "__main__":
         print(model.summary())
 
         history = model.fit(X_train, y_train, 
-                            epochs=64, 
+                            epochs=32, 
                             verbose=True, 
                             validation_data=(X_test, y_test), 
                             batch_size=128,
@@ -321,10 +333,10 @@ if __name__ == "__main__":
         loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
         print("Testing Accuracy:  {:.4f}".format(accuracy))
 
-    ### BINARY PREDICTION (e.g. gender)
-
     RNN()
 
+
+    ### BINARY PREDICTION (e.g. gender)
     def binary():
         model = binary_prediction_model(n_inputs)
         print(model.summary())
@@ -363,7 +375,7 @@ if __name__ == "__main__":
         loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
         print("Testing Accuracy:  {:.4f}".format(accuracy))
 
-    multiclass()    
+    #multiclass()    
     exit()
 
     #model = MLPClassifier()
