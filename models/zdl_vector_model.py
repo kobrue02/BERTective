@@ -1,3 +1,11 @@
+"""
+Enthält die ZDLVectorModel und ZDLVectorMatrix,
+wobei erstere größtenteils deprecated ist und nur die Funktionen zum
+generieren der Vektoren noch genutzt werden.
+ZDLVectorMatrix wird von main.py gecallt um einen gesamten
+DataCorpus mit ZDL-Vektoren zu repräsentieren.
+"""
+
 # to import scraper from same-level subdirectory
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -10,18 +18,21 @@ from german_stopwords import stopwords_
 from scraping_tools.zdl_regio_client import zdl_request, tokenize
 
 import json
-from langdetect import detect, DetectorFactory, lang_detect_exception
 import matplotlib.pyplot as plt
-from multiprocessing import Process, Manager, cpu_count
-from threading import Thread
-import time
 import numpy as np
 import os
 import pandas as pd
 import re
 import requests
+import seaborn as sns
 import spacy
 nlp = spacy.load('de_core_news_md')
+import time
+
+from langdetect import detect, DetectorFactory, lang_detect_exception
+from multiprocessing import Process, Manager, cpu_count
+from threading import Thread
+from tqdm import tqdm
 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -32,16 +43,61 @@ from sklearn.metrics import classification_report
 from sklearn.utils import shuffle
 from sklearn.tree import export_graphviz
 
-import seaborn as sns
-from tqdm import tqdm
 
+# mapping different cities to the areal they are part of
 AREAL_DICT = {
-              "DE-NORTH-EAST": ["Rostock", "Berlin","luebeck", "Potsdam"],
-              "DE-NORTH-WEST": ["bremen", "Hamburg","Hannover", "bielefeld", "Dortmund", "kiel", "Paderborn"],
-              "DE-MIDDLE-EAST": ["Leipzig", "dresden", "HalleSaale", "erfurt", "jena"],
-              "DE-MIDDLE-WEST": ["frankfurt", "duesseldorf", "cologne","Bonn", "Mainz", "Wiesbaden", "kaiserslautern", "Mannheim", "Saarland"],
-              "DE-SOUTH-EAST": ["Munich", "Nurnberg", "Regensburg", "Würzburg", "bayreuth", "bavaria"],
-              "DE-SOUTH-WEST": ["stuttgart", "augsburg", "freiburg", "karlsruhe", "Ulm", "Tuebingen", "Ludwigsburg", "Heidelberg", "stuttgart"],
+              "DE-NORTH-EAST": [
+                  "Rostock", 
+                  "Berlin",
+                  "luebeck", 
+                  "Potsdam"
+                  ],
+              "DE-NORTH-WEST": [
+                  "bremen", 
+                  "Hamburg",
+                  "Hannover", 
+                  "bielefeld", 
+                  "Dortmund", 
+                  "kiel", 
+                  "Paderborn"
+                  ],
+              "DE-MIDDLE-EAST": [
+                  "Leipzig", 
+                  "dresden", 
+                  "HalleSaale", 
+                  "erfurt", 
+                  "jena"
+                  ],
+              "DE-MIDDLE-WEST": [
+                  "frankfurt", 
+                  "duesseldorf", 
+                  "cologne",
+                  "Bonn", 
+                  "Mainz", 
+                  "Wiesbaden", 
+                  "kaiserslautern", 
+                  "Mannheim", 
+                  "Saarland"
+                  ],
+              "DE-SOUTH-EAST": [
+                  "Munich", 
+                  "Nurnberg", 
+                  "Regensburg", 
+                  "Würzburg",
+                  "bayreuth", 
+                  "bavaria"
+                  ],
+              "DE-SOUTH-WEST": [
+                  "stuttgart", 
+                  "augsburg", 
+                  "freiburg", 
+                  "karlsruhe", 
+                  "Ulm", 
+                  "Tuebingen", 
+                  "Ludwigsburg", 
+                  "Heidelberg", 
+                  "stuttgart"
+                  ],
             }
 
 class ZDLVectorModel:
@@ -292,8 +348,6 @@ class ZDLVectorMatrix:
                 __V, __vectionary = self._call_vectorizer(__obj.text)
                 __batch_dict[__ID] = __V
                 self._temporary_vectionaries.append(__vectionary)
-            
-            with self._lock:
                 self._chunk_matrices.append(__batch_dict)
 
     def _call_vectorizer(self, sample: str) -> np.array:
@@ -303,25 +357,32 @@ class ZDLVectorMatrix:
         """
         return ZDLVectorModel._vectorize_sample(sample, self.vectionary, verbose=self.verbose)
     
-    def _vectorize_data(self):
+    def _vectorize_data(self) -> dict:
+
+        """
+        Generates ZDL vector representation for each document in a DataCorpus.
+        If the corpus is larger than 128, multiprocessing is used to speed up 
+        the process.
+        :returns: dictionary of format {ID: vector-array}
+        """
 
         if len(self.data) < 128:
             print('only using one cpu as amount of data is low.')
             matrix = {}
             for n, __obj in enumerate(tqdm(self.data)):
-                __ID = __obj.content['id']
+                __ID = __obj.content['id']  # get object id
                 __V, __vectionary = self._call_vectorizer(__obj.text)
-                matrix[__ID] = __V
+                matrix[__ID] = __V   # store vectors with id as key
             return matrix
 
-        manager = Manager()
-        self._chunk_matrices = manager.list()
-        self._temporary_vectionaries = manager.list()
-        self._lock = manager.Lock()
+        self._chunk_matrices = []
+        self._temporary_vectionaries = []
 
         print("BUILDING ZDL MATRIX")
         matrix = {}
 
+        # split current batch into N chunks
+        # where N is the amount of available CPU kernels
         cores = cpu_count()
         full_batch_length = len(self.data)
         mp_batch_size = full_batch_length//cores
@@ -347,16 +408,21 @@ class ZDLVectorMatrix:
             P = Thread(target=self._batch, args=(SLICE, ))
             processes.append(P)
 
+        # start each process
         for process in processes:
             process.start()
         for process in processes:
             process.join()
         
+        # the vectionaries of the chunks will be merged
+        # into one dict, that is stored as a JSON
         for temp in self._temporary_vectionaries:
             self.vectionary.update(temp)
         with open('vectors/zdl_vector_dict.json', 'w') as f:
                     json.dump(self.vectionary, f)
 
+        # the vector matrices of each chunk 
+        # are merged into one dict and returned
         for chunk in self._chunk_matrices:
             matrix.update(chunk)
 
@@ -369,13 +435,16 @@ class ZDLVectorMatrix:
 
 if __name__ == "__main__":
 
-    sample = """Kennt ihr eine Tagesmutter in Stadtmitte oder im Kammgarnquartier/Textilviertel  empfehlen? 
-
-Ich suche für meinen dann 1 jährigen Sohn einen Betreuungsplatz bei einer Tagesmutter ab Sep 2023. In einer Krippe habe ich keinen Platz bekommen. Ich würde es bevorzugen, wenn die Tagesmutter ausgebildete Erzieherin ist. Ich bin aber auch offen für andere Tagesmütter, sofern es dann zumindest persönlich passt.
-
-Die Tagesmütter sollte in der Stadtmitte oder im Kammgarnquartier/Textilviertel sein.
-
-Ich hoffe, es findet sich eine liebevolle Tagesmütter, die den Kleinen einen klaren Rahmen gibt, in dem sie lernen können."""
+    sample = \
+        """
+        Kennt ihr eine Tagesmutter in Stadtmitte oder im Kammgarnquartier/Textilviertel  empfehlen? 
+        Ich suche für meinen dann 1 jährigen Sohn einen Betreuungsplatz bei einer Tagesmutter ab Sep 2023. 
+        In einer Krippe habe ich keinen Platz bekommen. Ich würde es bevorzugen, wenn die Tagesmutter ausgebildete Erzieherin ist. 
+        Ich bin aber auch offen für andere Tagesmütter, sofern es dann zumindest persönlich passt.
+        Die Tagesmütter sollte in der Stadtmitte oder im Kammgarnquartier/Textilviertel sein.
+        Ich hoffe, es findet sich eine liebevolle Tagesmütter, die den Kleinen einen klaren Rahmen gibt, in dem sie lernen können.
+        """
+    
     with open('vectors/zdl_vector_dict.json', 'r', encoding='utf-8') as f:
         vectionary: dict = json.load(f)
     sample_vector, _ = ZDLVectorModel._vectorize_sample(sample, vectionary, verbose=False)

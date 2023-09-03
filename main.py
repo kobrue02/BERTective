@@ -9,7 +9,6 @@ from tqdm import tqdm
 from langdetect import detect, DetectorFactory, lang_detect_exception
 from keras.backend import clear_session
 
-
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split, cross_val_score, KFold
 from sklearn.metrics import classification_report
@@ -25,6 +24,33 @@ import pandas as pd
 import random
 import time
 import tensorflow as tf
+
+def __make_directories(path: str):
+    os.makedirs(path, exist_ok=True)
+    os.makedirs(f'{path}/achse', exist_ok=True)
+    os.makedirs(f'{path}/annotation', exist_ok=True)
+    os.makedirs(f'{path}/reddit', exist_ok=True)
+    os.makedirs(f'{path}/reddit/locales', exist_ok=True)
+
+def __init_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-z', '--zdl', action='store_true')
+    parser.add_argument('-d', '--download', action='store_true')
+    parser.add_argument('-t', '--test', action='store_true')
+    return parser
+
+def __check_text_is_german(text: str) -> bool:
+    """ return true if text is german else false """
+    DetectorFactory.seed = 0
+    # we skip very short texts or posts removed from reddit
+    if text in ("[removed]", "[deleted]")  or len(text) < 20 or len(text.split()) < 3:
+        return False
+    try:
+        lang = detect(text)
+    except lang_detect_exception.LangDetectException:
+        return False
+        
+    return lang == "de"
 
 def __reddit_locales_to_datacorpus(path: str = "data", corpus: DataCorpus = None):
     """ 
@@ -49,7 +75,7 @@ def __reddit_locales_to_datacorpus(path: str = "data", corpus: DataCorpus = None
                     if filename.split(".")[0] in AREAL_DICT[key]:
                         for item in file_data["data"]:
                             text = item['selftext']
-                            if check_text_is_german(text):
+                            if __check_text_is_german(text):
                                 obj = DataObject(
                                         text = text,
                                         author_regiolect=key,
@@ -99,21 +125,7 @@ def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
 
         corpus.add_item(obj)
 
-    return corpus
-                                
-
-def check_text_is_german(text: str) -> bool:
-    """ return true if text is german else false """
-    DetectorFactory.seed = 0
-    # we skip very short texts or posts removed from reddit
-    if text in ("[removed]", "[deleted]")  or len(text) < 20 or len(text.split()) < 3:
-        return False
-    try:
-        lang = detect(text)
-    except lang_detect_exception.LangDetectException:
-        return False
-        
-    return lang == "de"
+    return corpus                             
 
 def __build_corpus(data: DataCorpus, PATH: str) -> DataCorpus:
     print("loading reddit data from locales")
@@ -124,7 +136,7 @@ def __build_corpus(data: DataCorpus, PATH: str) -> DataCorpus:
     data = __reddit_to_datacorpus(PATH, data)
     return data
 
-def to_num(L: list) -> list:
+def __to_num(L: list) -> list:
     """ turns string labels into float """
     a = {
         "DE-MIDDLE-EAST": 0.0,
@@ -155,10 +167,22 @@ def to_num(L: list) -> list:
         return [c[item] for item in L]
 
 def __build_zdl_vectors(data: DataCorpus):
+    """
+    This function uses ZDLVectorMatrix to generate ZDL vectors for texts in a DataCorpus.\n
+    Each text will be tokenized, and each token gets embedded in a 6-dimensional vector.\n
+    The token vectors are stored in an ordered array. \n
+    So a ZDL vector representation of a text with 32 words will have this shape:\n
+    (1, 32, 6).
+    For model training, the vectors will be padded to the length of the longest document
+    in the DataCorpus.\n
+    The vectorization is performed in batches, and each batch's results will be stored in a 
+    PARQUET file.\n
+    :param data: DataCorpus object which contains labelled documents.
+    """
     corpus_size = len(data)
     print(f"{corpus_size} items in DataCorpus.")
-    dict_list: list[dict] = []
-    batch_size = 1000
+    dict_list: list[dict] = []  # will store dicts of format {ID: vector}
+    batch_size = 1000  # amount of items to be vectorized in one batch
     for k in range(0, int(corpus_size/batch_size)+1):
         vector_database = pd.DataFrame()
         tqdm.write('Vectorizing Batch {}'.format(k+1))
@@ -176,10 +200,13 @@ def __build_zdl_vectors(data: DataCorpus):
         if k > 30:
             verbose = True
 
+        # if batch was already vectorized, skip
         check_file = os.path.isfile(f'test/ZDL/zdl_word_embeddings_batch_{k}.parquet')
         if check_file:
             print('Batch was already vectorized, skipping to next.')
             continue
+
+        # call ZDLVectorMatrix class to perform vectorization
         sample_vectors = ZDLVectorMatrix(source=data[start:end], verbose=verbose).vectors
         dict_list.append(sample_vectors)
 
@@ -198,6 +225,14 @@ def __build_zdl_vectors(data: DataCorpus):
 
 def __zero_pad(X: list, maxVal: int) -> list:
 
+    """
+    Given the longest document in a corpus, this method will
+    pad all data points to this size.
+    :param X: raw training data, with vectors of varying shapes
+    :param maxVal: the length of the longest document in the corpus
+    """
+
+    # iterate over each data point
     for i in range(len(X)):
         t = tf.convert_to_tensor(X[i], tf.float64)
         if len(t.shape) == 3:
@@ -225,16 +260,32 @@ def __maxval(X: list) -> int:
 
     return maxVal
 
+def __read_parquet(path: str) -> pd.DataFrame:
+    # read parquet files back into dataframe
+    directory_in_str = f"{path}/ZDL"
+    directory = os.fsencode(directory_in_str)
+    dataframe_list = []   
+    for file in tqdm(os.listdir(directory)):
+        filename = os.fsdecode(file)
+        if filename.endswith(".parquet"): 
+            temp = pd.read_parquet(f"{directory_in_str}/{filename}")
+            dataframe_list.append(temp)
+    vector_database = pd.concat(dataframe_list)
+    return vector_database
+
 if __name__ == "__main__":
 
-    PATH = "test"
+    parser = __init_parser()
+    args = parser.parse_args()
 
-    os.makedirs(PATH, exist_ok=True)
-    os.makedirs(f'{PATH}/achse', exist_ok=True)
-    os.makedirs(f'{PATH}/annotation', exist_ok=True)
-    os.makedirs(f'{PATH}/reddit', exist_ok=True)
-    os.makedirs(f'{PATH}/reddit/locales', exist_ok=True)
+    if args.test:
+        PATH = "test"
+    else:
+        PATH = "vectors"
+    __make_directories(PATH)
 
+    if args.download:
+        download_data(['achse', 'ortho', 'reddit_locales'], "test")
 
     with open('data/wiktionary/wiktionary.json', 'r', encoding='utf-8') as f:
         wiktionary: dict = json.load(f)
@@ -249,67 +300,61 @@ if __name__ == "__main__":
     data.read_avro(f'{PATH}/corpus.avro')
 
     #wiktionary_matrix = WiktionaryModel(source=data)
-    #wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
+    wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
     #wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
 
-    #__build_zdl_vectors(data=data)
-    
+    if args.zdl:
+        __build_zdl_vectors(data=data)
+        exit()
 
-    directory_in_str = f"vectors/ZDL"
-    directory = os.fsencode(directory_in_str)
-    dataframe_list = []   
-    for file in tqdm(os.listdir(directory)):
-        filename = os.fsdecode(file)
-        if filename.endswith(".parquet"): 
-            temp = pd.read_parquet(f"{directory_in_str}/{filename}")
-            dataframe_list.append(temp)
-    
-    vector_database = pd.concat(dataframe_list)
-    
-    #print(np.array(vector_database[vector_database['ID'] == 146].embedding))
+    vector_database = __read_parquet(PATH)
 
-    ids_ = []
-
+    ids_: list[int] = []
     for item in data:
         if item.source in ("ACHGUT", "REDDIT"):
             if item.author_regiolect not in ("N/A", "NONE", "", 0, "0", None):
                 ids_.append(item.content['id'])
         else:
             continue
+    
+    X_zdl = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
+    X_wikt = [wiktionary_matrix[id] for id in ids_]
 
     y = [data[id].author_regiolect for id in ids_]
-    #X = [wiktionary_matrix[id] for id in ids_]
-    X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
 
-    X, y = shuffle(X, y)
-
-    maxVal = __maxval(X)
-    X = __zero_pad(X, maxVal)
+    X, y = shuffle(ids_, y, random_state=42)
     
+    # print label distribution
     for item in list(set(y)):
         print(f"{item}: {list(y).count(item)}")
 
-    X_train, X_test, y_train, y_test = train_test_split(
+    ids_train, ids_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.2, random_state=42, stratify=y)
-    print(list(set(y_train)))
     
-    # if predicting string classes (regiolect, gender, education)
-    y_train = tf.stack(to_num(y_train))
-    y_test = tf.stack(to_num(y_test))
+    y_train = tf.stack(__to_num(y_train))
+    y_test = tf.stack(__to_num(y_test))
 
-    X_train = tf.stack(X_train)
-    X_test = tf.stack(X_test)
-
-
-    n_inputs, n_outputs = (1, 1933, 6), y_train.shape[0]
     clear_session()
 
-    def RNN():
+    def RNN(X: list, vectors: pd.DataFrame, ids_train: list, ids_test: list, y_train: list, y_test: list):
+
+        
+        Xtrain = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_train]
+        Xtest = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_test]
+
+        # get longest doc from corpus
+        maxVal: int = __maxval(Xtest+Xtrain)
+
+        # pad all vectors to that size
+        X_train: list[tf.Tensor] = tf.stack(__zero_pad(Xtrain, maxVal))
+        X_test: list[tf.Tensor] = tf.stack(__zero_pad(Xtest, maxVal))
+
+        n_inputs, n_outputs = (1, maxVal, 6), y_train.shape[0]
         model = rnn_model(n_inputs, n_outputs)
         print(model.summary())
 
         history = model.fit(X_train, y_train, 
-                            epochs=64, 
+                            epochs=32, 
                             verbose=True, 
                             validation_data=(X_test, y_test), 
                             batch_size=128,
@@ -321,10 +366,15 @@ if __name__ == "__main__":
         loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
         print("Testing Accuracy:  {:.4f}".format(accuracy))
 
+    RNN(
+        X=X_zdl, 
+        vectors=vector_database, 
+        ids_train=ids_train, 
+        ids_test=ids_test, 
+        y_train=y_train, 
+        y_test=y_test)
+
     ### BINARY PREDICTION (e.g. gender)
-
-    RNN()
-
     def binary():
         model = binary_prediction_model(n_inputs)
         print(model.summary())
@@ -363,46 +413,5 @@ if __name__ == "__main__":
         loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
         print("Testing Accuracy:  {:.4f}".format(accuracy))
 
-    multiclass()    
+    #multiclass()    
     exit()
-
-    #model = MLPClassifier()
-    # for regression
-    #model = KNeighborsRegressor(
-    #    weights='distance', 
-    #    n_neighbors=14)
-
-    model.fit(X_train, y_train)
-
-    y_pred = model.predict(X_test)
-
-    print(classification_report(y_test, y_pred))
-
-    exit()
-    offset = 0
-    for j in zip(y_test, y_pred):
-        offset += (abs(j[0] - int(j[1])))
-        avg = offset / len(y_test)
-    print(avg)
-    
-    #plt.plot(y_test)
-    #plt.plot(y_pred, 'o')
-
-    #plt.show()
-
-    #print(classification_report(y_test, y_pred))
-    
-    #wiktionary_df = pd.read_parquet('data/wiktionary/wiktionary.parquet')
-    #print(wiktionary_df.head())
-
-
-    
-    wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
-    exit()
-    download_data(['achse', 'ortho', 'reddit_locales'], "test")
-
-    data = DataCorpus()
-
-
-    print(data.as_dataframe().head())
-    data.save_to_avro(f"{PATH}/corpus.avro")

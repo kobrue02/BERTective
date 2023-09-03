@@ -13,7 +13,7 @@ from tqdm import tqdm
 from pprint import pprint
 
 def tokenize(sample: str) -> list:
-    unique_tokens = list(set(nltk.word_tokenize(sample)))
+    unique_tokens = list(dict.fromkeys(nltk.word_tokenize(sample)))
     without_stop = [tok for tok in unique_tokens if tok.lower() not in stopwords]
     without_reddit = [tok for tok in without_stop if tok.lower() not in reddit_stopwords]
     return [tok for tok in without_reddit if tok not in string.punctuation and len(tok) <= 25]
@@ -73,7 +73,6 @@ def text_sample_areal(text: str) -> str:
             match_counter['unknown'] += 1
 
     return match_counter
-
 
 if __name__ == "__main__":
     
