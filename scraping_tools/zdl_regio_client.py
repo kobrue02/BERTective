@@ -74,7 +74,6 @@ def text_sample_areal(text: str) -> str:
 
     return match_counter
 
-
 if __name__ == "__main__":
     
     with open("data/reddit/dating/beziehungen.json", "r", encoding="utf-8") as f:
