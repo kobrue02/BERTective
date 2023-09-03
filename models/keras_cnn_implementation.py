@@ -1,3 +1,10 @@
+"""
+Diese Datei enthält Implementierungen verschiedener Deep-Learning Modelle.
+Zur Implementierung wird die Keras API verwendet.
+Beste Ergebnisse werden mit RNN erzielt.
+"""
+
+
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, LSTM, Conv1D, MaxPooling1D, Input, TimeDistributed, Bidirectional
 from keras.optimizers import SGD, Adadelta, RMSprop, Adam
