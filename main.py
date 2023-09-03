@@ -280,6 +280,8 @@ if __name__ == "__main__":
 
     if args.test:
         PATH = "test"
+    else:
+        PATH = "zdl"
     __make_directories(PATH)
 
     if args.download:
