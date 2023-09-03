@@ -281,7 +281,7 @@ if __name__ == "__main__":
     if args.test:
         PATH = "test"
     else:
-        PATH = "zdl"
+        PATH = "vectors"
     __make_directories(PATH)
 
     if args.download:
@@ -300,7 +300,7 @@ if __name__ == "__main__":
     data.read_avro(f'{PATH}/corpus.avro')
 
     #wiktionary_matrix = WiktionaryModel(source=data)
-    #wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
+    wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
     #wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
 
     if args.zdl:
@@ -316,35 +316,40 @@ if __name__ == "__main__":
                 ids_.append(item.content['id'])
         else:
             continue
+    
+    X_zdl = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
+    X_wikt = [wiktionary_matrix[id] for id in ids_]
 
     y = [data[id].author_regiolect for id in ids_]
-    #X = [wiktionary_matrix[id] for id in ids_]
-    X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
 
-    X, y = shuffle(X, y, random_state=42)
-
-    # get longest doc from corpus
-    maxVal: int = __maxval(X)
-    # pad all vectors to that size
-    X: list[tf.Tensor] = __zero_pad(X, maxVal)
+    X, y = shuffle(ids_, y, random_state=42)
     
     # print label distribution
     for item in list(set(y)):
         print(f"{item}: {list(y).count(item)}")
 
-    X_train, X_test, y_train, y_test = train_test_split(
+    ids_train, ids_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.2, random_state=42, stratify=y)
     
     y_train = tf.stack(__to_num(y_train))
     y_test = tf.stack(__to_num(y_test))
 
-    X_train = tf.stack(X_train)
-    X_test = tf.stack(X_test)
-
-    n_inputs, n_outputs = (1, maxVal, 6), y_train.shape[0]
     clear_session()
 
-    def RNN():
+    def RNN(X: list, vectors: pd.DataFrame, ids_train: list, ids_test: list, y_train: list, y_test: list):
+
+        
+        Xtrain = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_train]
+        Xtest = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_test]
+
+        # get longest doc from corpus
+        maxVal: int = __maxval(Xtest+Xtrain)
+
+        # pad all vectors to that size
+        X_train: list[tf.Tensor] = tf.stack(__zero_pad(Xtrain, maxVal))
+        X_test: list[tf.Tensor] = tf.stack(__zero_pad(Xtest, maxVal))
+
+        n_inputs, n_outputs = (1, maxVal, 6), y_train.shape[0]
         model = rnn_model(n_inputs, n_outputs)
         print(model.summary())
 
@@ -361,7 +366,13 @@ if __name__ == "__main__":
         loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
         print("Testing Accuracy:  {:.4f}".format(accuracy))
 
-    RNN()
+    RNN(
+        X=X_zdl, 
+        vectors=vector_database, 
+        ids_train=ids_train, 
+        ids_test=ids_test, 
+        y_train=y_train, 
+        y_test=y_test)
 
     ### BINARY PREDICTION (e.g. gender)
     def binary():
