@@ -260,6 +260,7 @@ if __name__ == "__main__":
     os.makedirs(f'{PATH}/reddit', exist_ok=True)
     os.makedirs(f'{PATH}/reddit/locales', exist_ok=True)
 
+   # download_data(['achse', 'ortho', 'reddit_locales'], "test")
 
     with open('data/wiktionary/wiktionary.json', 'r', encoding='utf-8') as f:
         wiktionary: dict = json.load(f)
@@ -284,7 +285,7 @@ if __name__ == "__main__":
     
 
     # read parquet files back into dataframe
-    directory_in_str = f"vectors/ZDL"
+    directory_in_str = f"test/ZDL"
     directory = os.fsencode(directory_in_str)
     dataframe_list = []   
     for file in tqdm(os.listdir(directory)):
@@ -321,9 +322,7 @@ if __name__ == "__main__":
 
     X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.1, random_state=42, stratify=y)
-    print(list(set(y_train)))
     
-
     y_train = tf.stack(to_num(y_train))
     y_test = tf.stack(to_num(y_test))
 
@@ -395,44 +394,3 @@ if __name__ == "__main__":
 
     #multiclass()    
     exit()
-
-    #model = MLPClassifier()
-    # for regression
-    #model = KNeighborsRegressor(
-    #    weights='distance', 
-    #    n_neighbors=14)
-
-    model.fit(X_train, y_train)
-
-    y_pred = model.predict(X_test)
-
-    print(classification_report(y_test, y_pred))
-
-    exit()
-    offset = 0
-    for j in zip(y_test, y_pred):
-        offset += (abs(j[0] - int(j[1])))
-        avg = offset / len(y_test)
-    print(avg)
-    
-    #plt.plot(y_test)
-    #plt.plot(y_pred, 'o')
-
-    #plt.show()
-
-    #print(classification_report(y_test, y_pred))
-    
-    #wiktionary_df = pd.read_parquet('data/wiktionary/wiktionary.parquet')
-    #print(wiktionary_df.head())
-
-
-    
-    wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
-    exit()
-    download_data(['achse', 'ortho', 'reddit_locales'], "test")
-
-    data = DataCorpus()
-
-
-    print(data.as_dataframe().head())
-    data.save_to_avro(f"{PATH}/corpus.avro")
