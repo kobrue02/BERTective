@@ -292,8 +292,6 @@ class ZDLVectorMatrix:
                 __V, __vectionary = self._call_vectorizer(__obj.text)
                 __batch_dict[__ID] = __V
                 self._temporary_vectionaries.append(__vectionary)
-            
-            with self._lock:
                 self._chunk_matrices.append(__batch_dict)
 
     def _call_vectorizer(self, sample: str) -> np.array:
@@ -303,7 +301,14 @@ class ZDLVectorMatrix:
         """
         return ZDLVectorModel._vectorize_sample(sample, self.vectionary, verbose=self.verbose)
     
-    def _vectorize_data(self):
+    def _vectorize_data(self) -> dict:
+
+        """
+        Generates ZDL vector representation for each document in a DataCorpus.
+        If the corpus is larger than 128, multiprocessing is used to speed up 
+        the process.
+        :returns: dictionary of format {ID: vector-array}
+        """
 
         if len(self.data) < 128:
             print('only using one cpu as amount of data is low.')
@@ -315,9 +320,8 @@ class ZDLVectorMatrix:
             return matrix
 
         manager = Manager()
-        self._chunk_matrices = manager.list()
-        self._temporary_vectionaries = manager.list()
-        self._lock = manager.Lock()
+        self._chunk_matrices = []
+        self._temporary_vectionaries = []
 
         print("BUILDING ZDL MATRIX")
         matrix = {}

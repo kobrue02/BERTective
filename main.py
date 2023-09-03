@@ -9,7 +9,6 @@ from tqdm import tqdm
 from langdetect import detect, DetectorFactory, lang_detect_exception
 from keras.backend import clear_session
 
-
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split, cross_val_score, KFold
 from sklearn.metrics import classification_report
@@ -101,7 +100,6 @@ def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
 
     return corpus
                                 
-
 def check_text_is_german(text: str) -> bool:
     """ return true if text is german else false """
     DetectorFactory.seed = 0
@@ -188,10 +186,13 @@ def __build_zdl_vectors(data: DataCorpus):
         if k > 30:
             verbose = True
 
+        # if batch was already vectorized, skip
         check_file = os.path.isfile(f'test/ZDL/zdl_word_embeddings_batch_{k}.parquet')
         if check_file:
             print('Batch was already vectorized, skipping to next.')
             continue
+
+        # call ZDLVectorMatrix class to perform vectorization
         sample_vectors = ZDLVectorMatrix(source=data[start:end], verbose=verbose).vectors
         dict_list.append(sample_vectors)
 
@@ -210,6 +211,14 @@ def __build_zdl_vectors(data: DataCorpus):
 
 def __zero_pad(X: list, maxVal: int) -> list:
 
+    """
+    Given the longest document in a corpus, this method will
+    pad all data points to this size.
+    :param X: raw training data, with vectors of varying shapes
+    :param maxVal: the length of the longest document in the corpus
+    """
+
+    # iterate over each data point
     for i in range(len(X)):
         t = tf.convert_to_tensor(X[i], tf.float64)
         if len(t.shape) == 3:
@@ -239,6 +248,10 @@ def __maxval(X: list) -> int:
 
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', '--build', action='store_true')
+    args = parser.parse_args()
+
     PATH = "test"
 
     os.makedirs(PATH, exist_ok=True)
@@ -264,10 +277,14 @@ if __name__ == "__main__":
     #wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
     #wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
 
-    __build_zdl_vectors(data=data)
+    if args.build:
+        __build_zdl_vectors(data=data)
+        exit()
+    
     
 
-    directory_in_str = f"test/ZDL"
+    # read parquet files back into dataframe
+    directory_in_str = f"vectors/ZDL"
     directory = os.fsencode(directory_in_str)
     dataframe_list = []   
     for file in tqdm(os.listdir(directory)):
@@ -277,8 +294,6 @@ if __name__ == "__main__":
             dataframe_list.append(temp)
     
     vector_database = pd.concat(dataframe_list)
-    
-    #print(np.array(vector_database[vector_database['ID'] == 146].embedding))
 
     ids_ = []
 
@@ -295,17 +310,20 @@ if __name__ == "__main__":
 
     X, y = shuffle(X, y)
 
+    # get longest doc from corpus
     maxVal = __maxval(X)
+    # pad all vectors to that size
     X = __zero_pad(X, maxVal)
     
+    # print label distribution
     for item in list(set(y)):
         print(f"{item}: {list(y).count(item)}")
 
     X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, random_state=42, stratify=y)
+                X, y, test_size=0.1, random_state=42, stratify=y)
     print(list(set(y_train)))
     
-    # if predicting string classes (regiolect, gender, education)
+
     y_train = tf.stack(to_num(y_train))
     y_test = tf.stack(to_num(y_test))
 
@@ -313,7 +331,7 @@ if __name__ == "__main__":
     X_test = tf.stack(X_test)
 
 
-    n_inputs, n_outputs = (1, 1933, 6), y_train.shape[0]
+    n_inputs, n_outputs = (1, maxVal, 6), y_train.shape[0]
     clear_session()
 
     def RNN():
