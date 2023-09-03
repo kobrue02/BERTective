@@ -25,6 +25,33 @@ import random
 import time
 import tensorflow as tf
 
+def __make_directories(path: str):
+    os.makedirs(path, exist_ok=True)
+    os.makedirs(f'{path}/achse', exist_ok=True)
+    os.makedirs(f'{path}/annotation', exist_ok=True)
+    os.makedirs(f'{path}/reddit', exist_ok=True)
+    os.makedirs(f'{path}/reddit/locales', exist_ok=True)
+
+def __init_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-z', '--zdl', action='store_true')
+    parser.add_argument('-d', '--download', action='store_true')
+    parser.add_argument('-t', '--test', action='store_true')
+    return parser
+
+def __check_text_is_german(text: str) -> bool:
+    """ return true if text is german else false """
+    DetectorFactory.seed = 0
+    # we skip very short texts or posts removed from reddit
+    if text in ("[removed]", "[deleted]")  or len(text) < 20 or len(text.split()) < 3:
+        return False
+    try:
+        lang = detect(text)
+    except lang_detect_exception.LangDetectException:
+        return False
+        
+    return lang == "de"
+
 def __reddit_locales_to_datacorpus(path: str = "data", corpus: DataCorpus = None):
     """ 
     finds all files in the reddit locale folder and adds them to a DataCorpus 
@@ -48,7 +75,7 @@ def __reddit_locales_to_datacorpus(path: str = "data", corpus: DataCorpus = None
                     if filename.split(".")[0] in AREAL_DICT[key]:
                         for item in file_data["data"]:
                             text = item['selftext']
-                            if check_text_is_german(text):
+                            if __check_text_is_german(text):
                                 obj = DataObject(
                                         text = text,
                                         author_regiolect=key,
@@ -98,20 +125,7 @@ def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
 
         corpus.add_item(obj)
 
-    return corpus
-                                
-def check_text_is_german(text: str) -> bool:
-    """ return true if text is german else false """
-    DetectorFactory.seed = 0
-    # we skip very short texts or posts removed from reddit
-    if text in ("[removed]", "[deleted]")  or len(text) < 20 or len(text.split()) < 3:
-        return False
-    try:
-        lang = detect(text)
-    except lang_detect_exception.LangDetectException:
-        return False
-        
-    return lang == "de"
+    return corpus                             
 
 def __build_corpus(data: DataCorpus, PATH: str) -> DataCorpus:
     print("loading reddit data from locales")
@@ -122,7 +136,7 @@ def __build_corpus(data: DataCorpus, PATH: str) -> DataCorpus:
     data = __reddit_to_datacorpus(PATH, data)
     return data
 
-def to_num(L: list) -> list:
+def __to_num(L: list) -> list:
     """ turns string labels into float """
     a = {
         "DE-MIDDLE-EAST": 0.0,
@@ -246,21 +260,30 @@ def __maxval(X: list) -> int:
 
     return maxVal
 
+def __read_parquet(path: str) -> pd.DataFrame:
+    # read parquet files back into dataframe
+    directory_in_str = f"{path}/ZDL"
+    directory = os.fsencode(directory_in_str)
+    dataframe_list = []   
+    for file in tqdm(os.listdir(directory)):
+        filename = os.fsdecode(file)
+        if filename.endswith(".parquet"): 
+            temp = pd.read_parquet(f"{directory_in_str}/{filename}")
+            dataframe_list.append(temp)
+    vector_database = pd.concat(dataframe_list)
+    return vector_database
+
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-b', '--build', action='store_true')
+    parser = __init_parser()
     args = parser.parse_args()
 
-    PATH = "test"
+    if args.test:
+        PATH = "test"
+    __make_directories(PATH)
 
-    os.makedirs(PATH, exist_ok=True)
-    os.makedirs(f'{PATH}/achse', exist_ok=True)
-    os.makedirs(f'{PATH}/annotation', exist_ok=True)
-    os.makedirs(f'{PATH}/reddit', exist_ok=True)
-    os.makedirs(f'{PATH}/reddit/locales', exist_ok=True)
-
-   # download_data(['achse', 'ortho', 'reddit_locales'], "test")
+    if args.download:
+        download_data(['achse', 'ortho', 'reddit_locales'], "test")
 
     with open('data/wiktionary/wiktionary.json', 'r', encoding='utf-8') as f:
         wiktionary: dict = json.load(f)
@@ -278,26 +301,13 @@ if __name__ == "__main__":
     #wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
     #wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
 
-    if args.build:
+    if args.zdl:
         __build_zdl_vectors(data=data)
         exit()
-    
-    
 
-    # read parquet files back into dataframe
-    directory_in_str = f"test/ZDL"
-    directory = os.fsencode(directory_in_str)
-    dataframe_list = []   
-    for file in tqdm(os.listdir(directory)):
-        filename = os.fsdecode(file)
-        if filename.endswith(".parquet"): 
-            temp = pd.read_parquet(f"{directory_in_str}/{filename}")
-            dataframe_list.append(temp)
-    
-    vector_database = pd.concat(dataframe_list)
+    vector_database = __read_parquet(PATH)
 
-    ids_ = []
-
+    ids_: list[int] = []
     for item in data:
         if item.source in ("ACHGUT", "REDDIT"):
             if item.author_regiolect not in ("N/A", "NONE", "", 0, "0", None):
@@ -309,26 +319,25 @@ if __name__ == "__main__":
     #X = [wiktionary_matrix[id] for id in ids_]
     X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
 
-    X, y = shuffle(X, y)
+    X, y = shuffle(X, y, random_state=42)
 
     # get longest doc from corpus
-    maxVal = __maxval(X)
+    maxVal: int = __maxval(X)
     # pad all vectors to that size
-    X = __zero_pad(X, maxVal)
+    X: list[tf.Tensor] = __zero_pad(X, maxVal)
     
     # print label distribution
     for item in list(set(y)):
         print(f"{item}: {list(y).count(item)}")
 
     X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.1, random_state=42, stratify=y)
+                X, y, test_size=0.2, random_state=42, stratify=y)
     
-    y_train = tf.stack(to_num(y_train))
-    y_test = tf.stack(to_num(y_test))
+    y_train = tf.stack(__to_num(y_train))
+    y_test = tf.stack(__to_num(y_test))
 
     X_train = tf.stack(X_train)
     X_test = tf.stack(X_test)
-
 
     n_inputs, n_outputs = (1, maxVal, 6), y_train.shape[0]
     clear_session()
@@ -351,7 +360,6 @@ if __name__ == "__main__":
         print("Testing Accuracy:  {:.4f}".format(accuracy))
 
     RNN()
-
 
     ### BINARY PREDICTION (e.g. gender)
     def binary():
