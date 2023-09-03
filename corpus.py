@@ -24,19 +24,14 @@ class DataObject:
 
         """
         :param text: roher Text (z.B. Reddit-Post oder Blogeintrag)
-
         :param author_age: das Alter des Autors des Textes während des Verfassens (int)
-
         :param author_gender: das Geschlecht des Autors (M/F)
-
         :param author_regiolect: Herkunft des Autors innerhalb von Deutschland. \
         DE-NORTH-WEST, DE-NORTH-EAST, DE-MIDDLE-WEST, DE-MIDDLE-EAST, \
         DE-SOUTH-WEST oder DE-SOUTH-EAST
-
         :param author_education: Bildungsgrad des Autors. Akzeptiert "finished_highschool", \
         "in_university", "has_bachelor", "has_master", \
         "has_phd", "apprentice", "NONE"
-
         :param source: die Quelle des Texts (z.B. Reddit)
         """
         
@@ -174,8 +169,6 @@ class DataCorpus:
             
             self.add_item(obj)
 
-
-
     def __getitem__(self, i):
         
         if isinstance(i, int):
@@ -189,7 +182,6 @@ class DataCorpus:
         elif isinstance(i, slice): 
             return self.corpus[i.start:i.stop]
         
-    
     def __len__(self):
         return len(self.corpus)
         
