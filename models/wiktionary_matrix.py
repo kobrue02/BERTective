@@ -1,16 +1,25 @@
+"""
+Mithilfe der von wiktionary_api.py heruntergladenen JSON-Datei
+kann für einen Text ein Embedding erzeugt werden, welches
+repräsentiert, wie viele Wörter aus den verschiedenen
+Wiktionary-Wortlisten der Text enthält. Es gibt 27 Wortlisten,
+zu verschiedenen Fachgebieten, Anglizismen und mehr.
+"""
+
 import json
 import nltk
+import numpy as np
 import os
 import pandas as pd
 import pickle
-import numpy as np
+from tqdm import tqdm
+
+# to import from parent directionary
 import sys
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
-# to import from parent directionary
 from corpus import DataCorpus, DataObject
-from tqdm import tqdm
 
 
 class WiktionaryModel:
@@ -38,7 +47,6 @@ class WiktionaryModel:
             self.__wiktionary_matrix = self.__build_matrix()
             self.df_matrix: pd.DataFrame = self.__to_df()
         
-
     def __build_matrix(self):
         """
         for each DataObject in the corpus, the text is tokenized
