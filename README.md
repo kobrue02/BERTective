@@ -1,5 +1,5 @@
 # BERTective
-author profiling software for BND summer of code
+author profiling software for BND summer of code  
 pip install -r requirements.txt  
 Das Projekt befindet sich noch in der tiefsten Entwicklungsphase, daher gibt es noch kein zentrales ausführbares Programm.  
 [UPDATE] main.py lässt sich ausführen, Dokumentation folgt.    
