@@ -4,6 +4,8 @@ Zur Implementierung wird die Keras API verwendet.
 Beste Ergebnisse werden mit RNN erzielt.
 """
 
+import pandas as pd
+
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, LSTM, Conv1D, MaxPooling1D, Input, TimeDistributed, Bidirectional
 from keras.optimizers import SGD, Adadelta, RMSprop, Adam
@@ -53,6 +55,7 @@ def rnn_model(n_inputs: tuple, n_outputs):
     where X is the length of the longest document)
     :param n_outputs: the number of labels.
     """
+    
     model = Sequential()
     model.add(Input(shape=n_inputs))
     model.add(TimeDistributed(Conv1D(32, (4), activation='relu', data_format='channels_last')))

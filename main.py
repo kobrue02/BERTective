@@ -274,7 +274,8 @@ def __read_parquet(path: str) -> pd.DataFrame:
     return vector_database
 
 if __name__ == "__main__":
-
+    clear_session()
+    
     parser = __init_parser()
     args = parser.parse_args()
 
@@ -311,7 +312,7 @@ if __name__ == "__main__":
 
     ids_: list[int] = []
     for item in data:
-        if item.source in ("ACHGUT", "REDDIT"):
+        if item.source in ("ACHGUT"):
             if item.author_regiolect not in ("N/A", "NONE", "", 0, "0", None):
                 ids_.append(item.content['id'])
         else:
@@ -322,7 +323,7 @@ if __name__ == "__main__":
 
     y = [data[id].author_regiolect for id in ids_]
 
-    X, y = shuffle(ids_, y, random_state=42)
+    X, y = shuffle(ids_, y, random_state=3)
     
     # print label distribution
     for item in list(set(y)):
@@ -334,27 +335,12 @@ if __name__ == "__main__":
     y_train = tf.stack(__to_num(y_train))
     y_test = tf.stack(__to_num(y_test))
 
-    clear_session()
 
-    def RNN(X: list, vectors: pd.DataFrame, ids_train: list, ids_test: list, y_train: list, y_test: list):
-
-        
-        Xtrain = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_train]
-        Xtest = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_test]
-
-        # get longest doc from corpus
-        maxVal: int = __maxval(Xtest+Xtrain)
-
-        # pad all vectors to that size
-        X_train: list[tf.Tensor] = tf.stack(__zero_pad(Xtrain, maxVal))
-        X_test: list[tf.Tensor] = tf.stack(__zero_pad(Xtest, maxVal))
-
-        n_inputs, n_outputs = (1, maxVal, 6), y_train.shape[0]
+    def RNN(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
         model = rnn_model(n_inputs, n_outputs)
         print(model.summary())
-
         history = model.fit(X_train, y_train, 
-                            epochs=32, 
+                            epochs=64, 
                             verbose=True, 
                             validation_data=(X_test, y_test), 
                             batch_size=128,
@@ -366,13 +352,57 @@ if __name__ == "__main__":
         loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
         print("Testing Accuracy:  {:.4f}".format(accuracy))
 
-    RNN(
+    def multiclass(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
+        model = multi_class_prediction_model(n_inputs, n_outputs)
+        print(model.summary())
+
+        history = model.fit(X_train, y_train, 
+                            epochs=64, 
+                            verbose=True, 
+                            validation_data=(X_test, y_test), 
+                            batch_size=64,
+                            use_multiprocessing=True,
+                            workers=16)
+
+        loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
+        print("Training Accuracy: {:.4f}".format(accuracy))
+        loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
+        print("Testing Accuracy:  {:.4f}".format(accuracy))
+
+    def train_model(X: list, vectors: pd.DataFrame, ids_train: list, ids_test: list, y_train: list, y_test: list, source: str = "ZDL"):
+
+        if source == "ZDL":
+            Xtrain = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_train]
+            Xtest = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_test]
+
+            # get longest doc from corpus
+            maxVal: int = __maxval(Xtest+Xtrain)
+
+            # pad all vectors to that size
+            X_train: list[tf.Tensor] = tf.stack(__zero_pad(Xtrain, maxVal))
+            X_test: list[tf.Tensor] = tf.stack(__zero_pad(Xtest, maxVal))
+
+            n_inputs, n_outputs = (1, maxVal, 6), y_train.shape[0]
+            RNN(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+
+        elif source == "Wikt":
+
+            Xtrain = [vectors[id] for id in ids_train]
+            Xtest = [vectors[id] for id in ids_test]
+            X_train: list[tf.Tensor] = tf.stack(Xtrain)
+            X_test: list[tf.Tensor] = tf.stack(Xtest)
+
+            n_inputs, n_outputs = (27, ), y_train.shape[0]
+            multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+
+    train_model(
         X=X_zdl, 
         vectors=vector_database, 
         ids_train=ids_train, 
         ids_test=ids_test, 
         y_train=y_train, 
-        y_test=y_test)
+        y_test=y_test,
+        source="ZDL")
 
     ### BINARY PREDICTION (e.g. gender)
     def binary():
@@ -394,24 +424,6 @@ if __name__ == "__main__":
 
     # binary()
 
-    ### MULTI CLASS
-
-    def multiclass():
-        model = multi_class_prediction_model(n_inputs, n_outputs)
-        print(model.summary())
-
-        history = model.fit(X_train, y_train, 
-                            epochs=64, 
-                            verbose=True, 
-                            validation_data=(X_test, y_test), 
-                            batch_size=128,
-                            use_multiprocessing=True,
-                            workers=16)
-
-        loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
-        print("Training Accuracy: {:.4f}".format(accuracy))
-        loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
-        print("Testing Accuracy:  {:.4f}".format(accuracy))
 
     #multiclass()    
-    exit()
+    exit() 
