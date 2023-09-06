@@ -47,12 +47,12 @@ def __to_ymd(date: str) -> tuple:
 def __to_json_file(data: dict, filename: str, path: str):
 
     try:
-        with open(f"{path}/reddit/locales/{filename}.json", "r+", encoding="UTF-8") as f:
+        with open(f"{path}/reddit/dating/{filename}.json", "r+", encoding="UTF-8") as f:
             old_data = json.load(f)
     except FileNotFoundError:
         old_data = {"data": []}
         
-    with open(f"{path}/reddit/locales/{filename}.json", "w", encoding="UTF-8") as f:
+    with open(f"{path}/reddit/dating/{filename}.json", "w", encoding="UTF-8") as f:
         new_data = {"data": [item for item in old_data["data"] + [item for item in data["data"]]]}
         json.dump(new_data, f)
 
@@ -106,4 +106,7 @@ def locale_reddits(path: str):
 
 if __name__ == "__main__":
     
-    locale_reddits('test')
+    for sub in ['beziehungen', 'BinIchDasArschloch', 'Eltern', 'Ratschlag', 'vaeter']:
+        __download_subreddit_batch(sub, 'test')
+
+    #locale_reddits('test')
