@@ -4,6 +4,7 @@ from models.zdl_vector_model import AREAL_DICT, ZDLVectorMatrix
 from models.wiktionary_matrix import WiktionaryModel
 from models.keras_cnn_implementation import *
 from models.keras_regresssor_implementation import build_regressor
+from scraping_tools.wiktionary_api import wiktionary
 
 from tqdm import tqdm
 from langdetect import detect, DetectorFactory, lang_detect_exception
@@ -33,10 +34,21 @@ def __make_directories(path: str):
     os.makedirs(f'{path}/reddit/locales', exist_ok=True)
 
 def __init_parser() -> argparse.ArgumentParser:
+    """
+    creates an ArgumentParser which accepts a variety of arguments 
+    that can be used to define what methods to execute.
+    :returns: ArgumentParser()
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('-z', '--zdl', action='store_true')
-    parser.add_argument('-d', '--download', action='store_true')
+    parser.add_argument('-dd', '--download_data', action='store_true')
+    parser.add_argument('-dw', '--download_wikt', action='store_true')
     parser.add_argument('-t', '--test', action='store_true')
+    parser.add_argument('-b', '--build', action='store_true')
+    parser.add_argument('-p', '--path', type=str, default='test')
+    parser.add_argument('-s', '--save', action='store_true')
+    parser.add_argument('-bw', '--build_wikt', action='store_true')
+    parser.add_argument('-tr', '--train', action='store_true')
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -108,7 +120,7 @@ def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
     :param path: path to parquest file with annotated posts
     :param corpus: DataCorpus object to append data to
     """
-    reddit = pd.read_parquet(f'{path}/reddit/annotated_posts.parquet')
+    reddit = pd.read_parquet(f'{path}/reddit/annotated_posts_2.parquet')
 
     for item in zip(reddit.content, reddit.age, reddit.sex, reddit.regiolect):
         try:
@@ -274,19 +286,23 @@ def __read_parquet(path: str) -> pd.DataFrame:
     return vector_database
 
 if __name__ == "__main__":
-    clear_session()
+    clear_session()  # clear any previous training sessions
     
     parser = __init_parser()
     args = parser.parse_args()
-
+    
     if args.test:
         PATH = "test"
     else:
-        PATH = "vectors"
+        PATH = args.path
     __make_directories(PATH)
 
-    if args.download:
+
+    if args.download_data:
         download_data(['achse', 'ortho', 'reddit_locales'], "test")
+
+    if args.download_wikt:
+        wiktionary()
 
     with open('data/wiktionary/wiktionary.json', 'r', encoding='utf-8') as f:
         wiktionary: dict = json.load(f)
@@ -294,15 +310,22 @@ if __name__ == "__main__":
     data = DataCorpus()
 
     # if we want to build corpus
-    #data = __build_corpus(data, PATH)
-    #data.save_to_avro(f"{PATH}/corpus.avro")
+    if args.build:
+        data = __build_corpus(data, PATH)
+        data.save_to_avro(f"{PATH}/corpus.avro")
 
     # read existing corpus
     data.read_avro(f'{PATH}/corpus.avro')
+    print(len(data))
 
-    #wiktionary_matrix = WiktionaryModel(source=data)
-    wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
-    #wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
+    if args.save:
+        data.save_to_avro(f'{PATH}/corpus.avro')
+
+    if args.build_wikt:
+        wiktionary_matrix = WiktionaryModel(source=data)
+        wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
+    else:
+        wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
 
     if args.zdl:
         __build_zdl_vectors(data=data)
@@ -310,19 +333,26 @@ if __name__ == "__main__":
 
     vector_database = __read_parquet(PATH)
 
+    if not args.train:
+        exit()
+
     ids_: list[int] = []
     for item in data:
-        if item.source in ("ACHGUT"):
-            if item.author_regiolect not in ("N/A", "NONE", "", 0, "0", None):
+        if item.source in ("REDDIT"):
+            if item.author_age not in ("N/A", "NONE", "", 0, "0", None):
                 ids_.append(item.content['id'])
         else:
             continue
     
+    # get corresponding zdl vectors for each id
     X_zdl = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
+    # get corresponding wiktionary vectors
     X_wikt = [wiktionary_matrix[id] for id in ids_]
 
-    y = [data[id].author_regiolect for id in ids_]
+    # define target labels
+    y = [data[id].author_age for id in ids_]
 
+    # shuffle the training data
     X, y = shuffle(ids_, y, random_state=3)
     
     # print label distribution
@@ -330,8 +360,9 @@ if __name__ == "__main__":
         print(f"{item}: {list(y).count(item)}")
 
     ids_train, ids_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, random_state=42, stratify=y)
+                X, y, test_size=0.2, random_state=42) #, stratify=y)
     
+    # convert labels to tensor stack
     y_train = tf.stack(__to_num(y_train))
     y_test = tf.stack(__to_num(y_test))
 
@@ -396,13 +427,13 @@ if __name__ == "__main__":
             multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
 
     train_model(
-        X=X_zdl, 
-        vectors=vector_database, 
+        X=X_wikt, 
+        vectors=wiktionary_matrix, 
         ids_train=ids_train, 
         ids_test=ids_test, 
         y_train=y_train, 
         y_test=y_test,
-        source="ZDL")
+        source="Wikt")
 
     ### BINARY PREDICTION (e.g. gender)
     def binary():
