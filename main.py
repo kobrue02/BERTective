@@ -1,10 +1,11 @@
+from auxiliary import ABOUT
 from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
 from models.zdl_vector_model import AREAL_DICT, ZDLVectorMatrix
 from models.wiktionary_matrix import WiktionaryModel
 from models.keras_cnn_implementation import *
 from models.keras_regresssor_implementation import build_regressor
-from scraping_tools.wiktionary_api import wiktionary
+from scraping_tools.wiktionary_api import download_wiktionary
 
 from tqdm import tqdm
 from langdetect import detect, DetectorFactory, lang_detect_exception
@@ -40,15 +41,17 @@ def __init_parser() -> argparse.ArgumentParser:
     :returns: ArgumentParser()
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('-z', '--zdl', action='store_true')
-    parser.add_argument('-dd', '--download_data', action='store_true')
-    parser.add_argument('-dw', '--download_wikt', action='store_true')
-    parser.add_argument('-t', '--test', action='store_true')
-    parser.add_argument('-b', '--build', action='store_true')
+    parser.add_argument('-z', '--zdl', action='store_true', help='build zdl vector database')
+    parser.add_argument('-dd', '--download_data', action='store_true', help='download data resources')
+    parser.add_argument('-dw', '--download_wikt', action='store_true', help='download wiktionary resources')
+    parser.add_argument('-t', '--test', action='store_true', help='sets PATH to "test"')
+    parser.add_argument('-b', '--build', action='store_true', help='builds a new corpus from scratch')
     parser.add_argument('-p', '--path', type=str, default='test')
     parser.add_argument('-s', '--save', action='store_true')
     parser.add_argument('-bw', '--build_wikt', action='store_true')
+    parser.add_argument('-lw', '--load_wikt', action='store_true')
     parser.add_argument('-tr', '--train', action='store_true')
+    parser.add_argument('-a', '--about', action='store_true')
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -175,8 +178,10 @@ def __to_num(L: list) -> list:
         return [a[item] for item in L]
     elif L[0] in list(b.keys()):
         return [b[item] for item in L]
-    else: 
+    elif L[0] in list(c.keys()): 
         return [c[item] for item in L]
+    else:
+        return L
 
 def __build_zdl_vectors(data: DataCorpus):
     """
@@ -286,10 +291,27 @@ def __read_parquet(path: str) -> pd.DataFrame:
     return vector_database
 
 if __name__ == "__main__":
+
     clear_session()  # clear any previous training sessions
     
     parser = __init_parser()
     args = parser.parse_args()
+
+    # some assertions
+    assert args.build_wikt ^ args.load_wikt ^ args.about, "you need to either load or build a wiktionary"
+    assert args.test ^ (args.path != 'test')
+    if args.about:
+        remaining = [
+            args.zdl,
+            args.download_data,
+            args.download_wikt,
+            args.test,
+            args.build,
+            args.path != 'test',
+            args.save,
+            args.train
+        ]
+        assert not any(remaining), "-a (--about) can only be used on its own."
     
     if args.test:
         PATH = "test"
@@ -297,12 +319,14 @@ if __name__ == "__main__":
         PATH = args.path
     __make_directories(PATH)
 
+    if args.about:
+        print(ABOUT)
 
     if args.download_data:
         download_data(['achse', 'ortho', 'reddit_locales'], "test")
 
     if args.download_wikt:
-        wiktionary()
+        download_wiktionary()
 
     with open('data/wiktionary/wiktionary.json', 'r', encoding='utf-8') as f:
         wiktionary: dict = json.load(f)
@@ -324,7 +348,8 @@ if __name__ == "__main__":
     if args.build_wikt:
         wiktionary_matrix = WiktionaryModel(source=data)
         wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
-    else:
+    
+    if args.load_wikt:
         wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
 
     if args.zdl:
@@ -388,7 +413,7 @@ if __name__ == "__main__":
         print(model.summary())
 
         history = model.fit(X_train, y_train, 
-                            epochs=64, 
+                            epochs=128, 
                             verbose=True, 
                             validation_data=(X_test, y_test), 
                             batch_size=64,
