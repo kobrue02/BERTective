@@ -12,19 +12,14 @@ from langdetect import detect, DetectorFactory, lang_detect_exception
 from keras.backend import clear_session
 
 from sklearn.utils import shuffle
-from sklearn.model_selection import train_test_split, cross_val_score, KFold
-from sklearn.metrics import classification_report
+from sklearn.model_selection import train_test_split
 
 import argparse
 import json
 import matplotlib.pyplot as plt
-import multiprocessing
-import nltk
 import numpy as np
 import os
 import pandas as pd
-import random
-import time
 import tensorflow as tf
 
 def __make_directories(path: str):
