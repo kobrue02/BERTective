@@ -71,6 +71,9 @@ class DataCorpus:
         else:
             raise ValueError("item couldn't be verified.")
     
+    def from_list(self, data: list[DataObject]):
+        self.corpus = data
+
     def __verify(self, item: DataObject) -> bool:
         """ verify whether a DataObject contains all required information in the right formats """
         features = ['text', 'author_age', 'author_gender', 'author_regiolect', 'author_education', 'source']
