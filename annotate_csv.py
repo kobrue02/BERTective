@@ -89,8 +89,8 @@ def annotate_to_dataframe(path: str, locale: str) -> pd.DataFrame:
 if __name__ == "__main__":
 
     datasets = []
-    path = "data"
-    for subdir in ["dating", "education", "profession", "locales"]:
+    path = "test"
+    for subdir in ["dating"]: #, "education", "profession", "locales"]:
         print("annotating data from r/{}.".format(subdir))
         directory_in_str = f"{path}/reddit/{subdir}"
         directory = os.fsencode(directory_in_str)
@@ -114,4 +114,4 @@ if __name__ == "__main__":
     print(len(data.index))
     print(list(set(data.sex.tolist())))
 
-    data.to_parquet('test/reddit/annotated_posts.parquet')
+    data.to_parquet('test/reddit/annotated_posts_2.parquet')

@@ -146,7 +146,7 @@ def __build_corpus(data: DataCorpus, PATH: str) -> DataCorpus:
     data = __reddit_to_datacorpus(PATH, data)
     return data
 
-def __to_num(L: list) -> list:
+def __to_num(L: list) -> list[float]:
     """ turns string labels into float """
     a = {
         "DE-MIDDLE-EAST": 0.0,
