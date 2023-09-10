@@ -1,6 +1,7 @@
 from auxiliary import ABOUT
 from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
+from data.gutenberg.gutenberg_to_dataobject import align_dicts
 from models.zdl_vector_model import AREAL_DICT, ZDLVectorMatrix
 from models.wiktionary_matrix import WiktionaryModel
 from models.keras_cnn_implementation import *
@@ -61,6 +62,27 @@ def __check_text_is_german(text: str) -> bool:
         return False
         
     return lang == "de"
+
+def __author_dict_to_dataobject() -> list[DataObject]:
+
+    with open('data/gutenberg/data.json', 'r') as f:
+        data = json.load(f)
+
+    with open('data/gutenberg/author_dict.json', 'r') as f:
+        author_dict = json.load(f)
+
+    authors = align_dicts(data, author_dict)
+    dataobjs = []
+
+    for item in authors["books"]:
+        obj = DataObject(
+            text=item["text"],
+            author_age=item["author_age"],
+            author_gender=item["author_gender"]
+        )
+        dataobjs.append(obj)
+    
+    return dataobjs
 
 def __reddit_locales_to_datacorpus(path: str = "data", corpus: DataCorpus = None):
     """ 
@@ -137,6 +159,12 @@ def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
 
     return corpus                             
 
+def __gutenberg_to_datacorpus(path: str, corpus: DataCorpus):
+    gutenberg = __author_dict_to_dataobject()
+    for item in tqdm(gutenberg):
+        corpus.add_item(item)
+    return corpus
+
 def __build_corpus(data: DataCorpus, PATH: str) -> DataCorpus:
     print("loading reddit data from locales")
     data = __reddit_locales_to_datacorpus(PATH, data)
@@ -144,6 +172,8 @@ def __build_corpus(data: DataCorpus, PATH: str) -> DataCorpus:
     data = __achgut_to_datacorpus(PATH, data)
     print("loading reddit data from miscellaneous")
     data = __reddit_to_datacorpus(PATH, data)
+    print("loading gutenberg data")
+    data = __gutenberg_to_datacorpus(PATH, data)
     return data
 
 def __to_num(L: list) -> list[float]:
@@ -293,7 +323,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # some assertions
-    assert args.build_wikt ^ args.load_wikt ^ args.about, "you need to either load or build a wiktionary"
+    assert args.build_wikt ^ args.load_wikt ^ args.build ^ args.about, "you need to either load or build a wiktionary"
     assert args.test ^ (args.path != 'test')
     if args.about:
         remaining = [

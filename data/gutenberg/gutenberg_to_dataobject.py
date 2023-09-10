@@ -2,7 +2,7 @@ import json
 from pprint import pprint
 
 
-def _align_dicts(data: dict, author_dict: dict) -> dict:
+def align_dicts(data: dict, author_dict: dict) -> dict:
     full_dict = {"books": []}
     for data_item in data['texts']:
         try:
@@ -22,5 +22,6 @@ if __name__ == "__main__":
     with open('data/gutenberg/author_dict.json', 'r') as f:
         author_dict = json.load(f)
 
-    authors = _align_dicts(data, author_dict)
-    pprint(authors)
+    authors = align_dicts(data, author_dict)
+
+    
