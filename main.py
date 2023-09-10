@@ -198,7 +198,9 @@ def __to_num(L: list) -> list[float]:
 
     c = {
         "female": 0.0,
-        "male": 1.0
+        "male": 1.0,
+        "f": 0.0,
+        "m": 1.0
         }
         
     if L[0] in list(a.keys()):
@@ -390,8 +392,8 @@ if __name__ == "__main__":
 
     ids_: list[int] = []
     for item in data:
-        if item.source in ("REDDIT"):
-            if item.author_age not in ("N/A", "NONE", "", 0, "0", None):
+        if item.source in ("REDDIT, ACHGUT, GUTENBERG"):
+            if item.author_gender not in ("N/A", "NONE", "", 0, "0", None):
                 ids_.append(item.content['id'])
         else:
             continue
@@ -402,7 +404,7 @@ if __name__ == "__main__":
     X_wikt = [wiktionary_matrix[id] for id in ids_]
 
     # define target labels
-    y = [data[id].author_age for id in ids_]
+    y = [data[id].author_gender for id in ids_]
 
     # shuffle the training data
     X, y = shuffle(ids_, y, random_state=3)
@@ -443,7 +445,7 @@ if __name__ == "__main__":
                             epochs=128, 
                             verbose=True, 
                             validation_data=(X_test, y_test), 
-                            batch_size=64,
+                            batch_size=32,
                             use_multiprocessing=True,
                             workers=16)
 

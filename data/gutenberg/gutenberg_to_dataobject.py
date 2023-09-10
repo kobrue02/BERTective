@@ -8,7 +8,7 @@ def align_dicts(data: dict, author_dict: dict) -> dict:
         try:
             y = next(item for item in author_dict['books'] if item["book_name"] == data_item['book_name'])
         except StopIteration:
-            break
+            continue
         temp = dict(y)
         temp.update({'text': data_item["text"]})
         full_dict['books'].append(temp)
@@ -23,5 +23,5 @@ if __name__ == "__main__":
         author_dict = json.load(f)
 
     authors = align_dicts(data, author_dict)
-
+    print(authors["books"][25])
     
