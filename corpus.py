@@ -84,7 +84,7 @@ class DataCorpus:
         if not isinstance(item.content['text'], str):
             return False
         
-        if not (isinstance(item.content['author_age'], int) or item.content["author_age"] is None):
+        if (not isinstance(item.content['author_age'], int) or len(str(item.content['author_age']))) > 3:
             return False
         
         if not item.content['author_regiolect'] in ["DE-NORTH-WEST",
