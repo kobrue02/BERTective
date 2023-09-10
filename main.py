@@ -81,7 +81,8 @@ def __author_dict_to_dataobject() -> list[DataObject]:
             author_gender=item["author_gender"],
             source="GUTENBERG"
         )
-        dataobjs.append(obj)
+        if isinstance(obj.content["author_age"], int):
+            dataobjs.append(obj)
     
     return dataobjs
 
