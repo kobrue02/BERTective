@@ -78,7 +78,8 @@ def __author_dict_to_dataobject() -> list[DataObject]:
         obj = DataObject(
             text=item["text"],
             author_age=item["author_age"],
-            author_gender=item["author_gender"]
+            author_gender=item["author_gender"],
+            source="GUTENBERG"
         )
         dataobjs.append(obj)
     
