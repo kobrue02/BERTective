@@ -1,7 +1,107 @@
 import spacy
 import pandas
-import numpy
 nlp = spacy.load("de_core_news_sm")
+
+
+def ratio_char_word(document: str) -> float:
+    """
+    Calculate the average count of characters per word contained in the given text input
+    :param document: text as string
+    :return: document’s average word length
+    """
+    doc = nlp(document)
+    total_words_length = 0
+    word_count = 0
+    for token in doc:
+        if not token.is_space and not token.is_punct and not token.is_digit:
+            total_words_length += len(token.text)
+            word_count += 1
+    if word_count > 0:
+        return total_words_length/word_count
+    else:
+        return word_count
+
+
+def ratio_words_sent(document: str) -> float:
+    """
+    Calculate the average count of words per sentence contained in the given text input
+    :param document: text as string
+    :return: document’s average word count per sentence
+    """
+    doc = nlp(document)
+    total_sent_count = 0
+    total_word_count = 0
+    for sentence in doc.sents:
+        total_sent_count += 1
+        for token in sentence:
+            if not token.is_space and not token.is_punct:
+                total_word_count += 1
+    if total_sent_count > 0:
+        return total_word_count/total_sent_count
+    else:
+        return total_sent_count
+
+
+def ratio_morph_word(document: str) -> float:
+    """
+    TODO: fix ModuleNotFoundError: No module named 'icu' – function under construction
+    Calculate the average count of morphemes per word contained in the given text input
+    :param document: text as string
+    :return: document’s average morpheme count per word
+    """
+    #doc = nlp(document)
+    #total_morph_
+    #word_count = 0
+    #for token in doc:
+    #    if not token.is_space and not token.is_punct and not token.is_digit:
+    #    total_word_count += 1
+    return 0.123456789
+
+
+def ratio_vowels_cons(document: str) -> float:
+    """
+    Calculate the vowel-consonant ratio of the given text input
+    :param document: text as string
+    :return: document’s vowel-consonant ratio
+    """
+    vowel_count = 0
+    consonant_count = 0
+    for char in document:
+        if char in "aeiouäöüAEIOUÄÖÜ":
+            vowel_count += 1
+        elif char in "bcdfghjklmnpqrstvwxyzßBCDFGHJKLMNPQRSTVWXYZẞ":
+            consonant_count += 1
+    if consonant_count > 0:
+        return vowel_count/consonant_count
+    else:
+        return consonant_count
+
+
+def ratio_cap_nocap(document: str, count_remaining=False) -> float:
+    """
+    Calculate the ratio of capitalized to non-capitalized words in the given text input
+    :param document: text as string
+    :param count_remaining: for debugging, additionally print number of words that flew under the radar (default: False)
+    :return: document’s word capitalization rate
+    """
+    doc = nlp(document)
+    capitalised = 0
+    non_capitalized = 0
+    neither = 0
+    for token in doc:
+        if not token.is_space and not token.is_punct and not token.is_digit:
+            if str(token)[0] in "abcdefghijklmnopqrstuvwxyzäöüß":
+                non_capitalized += 1
+            elif str(token)[0] in "ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜẞ":
+                capitalised += 1
+            else:
+                neither += 1
+    if count_remaining:
+        print(f"number of words neither in 'abc…xyzäöüß' nor in 'ABC…XYZÄÖÜẞ': {neither}")
+    if non_capitalized > 0:
+        return capitalised/non_capitalized
+    else:
+        return non_capitalized
 
 
 lorem = """
@@ -48,74 +148,31 @@ recht … kurzer ... Text.
 """
 texts = [comedian, goethe, lorem, kafka, trapattoni, fontane, wortberge, schiller, short]
 
-
-def char_per_word(document: str) -> float:
-    """
-    calculate the average count of characters per word contained in the given text input
-    :param document: text as string
-    :return: document’s average word length
-    """
-    doc = nlp(document)
-    total_words_length = 0
-    word_count = 0
-    for token in doc:
-        if not token.is_space and not token.is_punct:
-            total_words_length += len(token.text)
-            word_count += 1
-    if word_count > 0:
-        return total_words_length / word_count
-    else:
-        return word_count
+# TODO: dataframe structure
+#data = []
+#for text in texts:
+#    row = {
+#        "Text": text,
+#        "Chars/Word": char_per_word(text),
+#        "Words/Sent": words_per_sent(text),
+#        "Morphs/Word": morph_per_word(text),
+#        "…": …(text)
+#    }
+#    data.append(row)
+#df = pandas.DataFrame(data)
 
 
-def words_per_sent(document: str) -> float:
-    """
-    calculate the average count of words per sentence contained in the given text input
-    :param document: text as string
-    :return: document’s average word count per sentence
-    """
-    doc = nlp(document)
-    total_sent_count = 0
-    total_word_count = 0
-    for sentence in doc.sents:
-        total_sent_count += 1
-        for token in sentence:
-            if not token.is_space and not token.is_punct:
-                total_word_count += 1
-    if total_sent_count > 0:
-        return total_word_count / total_sent_count
-    else:
-        return total_sent_count
-
-
-def morph_per_word(document: str) -> float:
-    """
-    calculate the average count of morphemes per word contained in the given text input
-    :param document: text as string
-    :return: document’s average morpheme count per word
-    """
-    #doc = nlp(document)
-    #total_morph_
-    #word_count = 0
-    #for token in doc:
-    #    if not token.is_space and not token.is_punct:
-    #    total_word_count += 1
-
-    return 9.6
-
-
-data = []
-for text in texts:
-    row = {
-        "Text": text,
-        "Function1_Result": char_per_word(text),
-        "Function2_Result": words_per_sent(text),
-        "Function3_Result": morph_per_word(text),
-    }
-    data.append(row)
-
-df = pandas.DataFrame(data)
+def print_stats(text):
+    print(text[0:50])
+    print("characters / words:")
+    print(ratio_char_word(text))
+    print("words / sentences:")
+    print(ratio_words_sent(text))
+    print("vowels / consonants:")
+    print(ratio_vowels_cons(text))
+    print("uppercase words / lowercase words")
+    print(ratio_cap_nocap(text, count_remaining=True))
 
 
 for text in texts:
-    print(text[0:50], char_per_word(text), words_per_sent(text))
+    print_stats(text)
