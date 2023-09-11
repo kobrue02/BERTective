@@ -11,6 +11,7 @@ from scraping_tools.wiktionary_api import download_wiktionary
 from tqdm import tqdm
 from langdetect import detect, DetectorFactory, lang_detect_exception
 from keras.backend import clear_session
+import matplotlib.pyplot as plt
 
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
@@ -21,6 +22,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
+import seaborn as sns
 import tensorflow as tf
 
 def __make_directories(path: str):
@@ -48,7 +50,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-lw', '--load_wikt', action='store_true')
     parser.add_argument('-tr', '--train', action='store_true')
     parser.add_argument('-a', '--about', action='store_true')
-    parser.add_argument('-q', '--query', type=str, default='source=GUTENBERG')
+    parser.add_argument('-q', '--query', type=str, default=None)
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -337,10 +339,35 @@ def __plot_items(items: list[DataObject]):
     education_dist = {}
 
     for item in items:
-        age_dist[item.author_age] += 1
-        gender_dist[item.author_gender] += 1
-        regiolect_dist[item.author_regiolect] += 1
-        education_dist[item.author_education] += 1
+
+        # age
+        if item.author_age in age_dist:
+            age_dist[item.author_age] += 1
+        else:
+            age_dist[item.author_age] = 1
+        
+        # gender
+        if item.author_gender in gender_dist:
+            gender_dist[item.author_gender] += 1
+        else:
+            gender_dist[item.author_gender] = 1
+        
+        # regiolect
+        if item.author_regiolect in regiolect_dist:
+            regiolect_dist[item.author_regiolect] += 1
+        else:
+            regiolect_dist[item.author_regiolect] = 1
+
+        # education
+        if item.author_education in education_dist:
+            education_dist[item.author_education] += 1
+        else:
+            education_dist[item.author_education] = 1
+
+    sns.barplot(x=list(age_dist.keys()), y=list(age_dist.values()))
+    plt.show()
+        
+    
 
     
 
@@ -354,8 +381,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # some assertions
-    assert args.build_wikt ^ args.load_wikt ^ args.build ^ args.about, "you need to either load or build a wiktionary"
+    assert args.build_wikt ^ args.load_wikt ^ args.build ^ args.about ^ bool(args.query), "you need to either load or build a wiktionary"
     assert args.test ^ (args.path != 'test')
+
     if args.about:
         remaining = [
             args.zdl,
@@ -397,6 +425,10 @@ if __name__ == "__main__":
     # read existing corpus
     data.read_avro(f'{PATH}/corpus.avro')
     print(len(data))
+
+    if args.query != None:
+        items = __get_query(data, args.query)
+        __plot_items(items)
 
     if args.save:
         data.save_to_avro(f'{PATH}/corpus.avro')
