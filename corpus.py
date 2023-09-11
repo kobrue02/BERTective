@@ -172,6 +172,19 @@ class DataCorpus:
             
             self.add_item(obj)
 
+    def query(self, search: dict[str, str]) -> list[DataObject]:
+
+        label = list(search.keys())[0]
+        value = search[label]
+
+        query_result = []
+        for item in self.corpus:
+            if item.content[label] == value:
+                query_result.append(item)
+
+        return query_result
+
+
     def __getitem__(self, i):
         
         if isinstance(i, int):

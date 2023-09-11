@@ -48,6 +48,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-lw', '--load_wikt', action='store_true')
     parser.add_argument('-tr', '--train', action='store_true')
     parser.add_argument('-a', '--about', action='store_true')
+    parser.add_argument('-q', '--query', type=str, default='source=GUTENBERG')
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -318,6 +319,32 @@ def __read_parquet(path: str) -> pd.DataFrame:
             dataframe_list.append(temp)
     vector_database = pd.concat(dataframe_list)
     return vector_database
+
+def __get_query(data: DataCorpus, query: str):
+
+    label = query.split("=")[0]
+    value = query.split("=")[1]
+    Q = {label: value}
+    items = data.query(Q)
+
+    return items
+
+def __plot_items(items: list[DataObject]):
+
+    age_dist = {}
+    gender_dist = {}
+    regiolect_dist = {}
+    education_dist = {}
+
+    for item in items:
+        age_dist[item.author_age] += 1
+        gender_dist[item.author_gender] += 1
+        regiolect_dist[item.author_regiolect] += 1
+        education_dist[item.author_education] += 1
+
+    
+
+
 
 if __name__ == "__main__":
 
