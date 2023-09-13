@@ -6,6 +6,7 @@ from models.zdl_vector_model import AREAL_DICT, ZDLVectorMatrix
 from models.wiktionary_matrix import WiktionaryModel
 from models.keras_cnn_implementation import *
 from models.keras_regresssor_implementation import build_regressor
+from models.error_and_ortho_matrix import OrthoMatrixModel
 from scraping_tools.wiktionary_api import download_wiktionary
 
 from tqdm import tqdm
@@ -51,6 +52,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-tr', '--train', action='store_true')
     parser.add_argument('-a', '--about', action='store_true')
     parser.add_argument('-q', '--query', type=str, default=None)
+    parser.add_argument('-o', '--ortho', action='store_true')
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -272,6 +274,31 @@ def __build_zdl_vectors(data: DataCorpus):
     else:
         print('all batches have been vectorized.')
 
+def __build_ortho_matrix(data: DataCorpus):
+    ortho = OrthoMatrixModel()
+    corpus_size = len(data)
+    matrix = {}
+    for n in tqdm(range(corpus_size)):
+
+        ID = data[n].content['id']
+        text = data[n].text
+
+        ancient = ortho.find_ortho_match_in_text(text, 'ancient')
+        revolutionized = ortho.find_ortho_match_in_text(text, 'revolutionized')
+        modern = ortho.find_ortho_match_in_text(text, 'modern')
+        error = ortho.find_error_match_in_text(text, 'error')
+        correct = ortho.find_error_match_in_text(text, 'correct')
+
+        matrix[ID] = {
+            'embedding_ancient': ancient,
+            'embedding_revolutionized': revolutionized,
+            'embedding_modern': modern,
+            'embedding_error': error,
+            'embedding_correct': correct
+        }
+
+    return matrix
+
 def __zero_pad(X: list, maxVal: int) -> list:
 
     """
@@ -364,14 +391,10 @@ def __plot_items(items: list[DataObject]):
         else:
             education_dist[item.author_education] = 1
 
-    sns.barplot(x=list(age_dist.keys()), y=list(age_dist.values()))
+    sns.barplot(x=list(regiolect_dist.keys()), y=list(regiolect_dist.values()))
     plt.show()
         
     
-
-    
-
-
 
 if __name__ == "__main__":
 
@@ -381,7 +404,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # some assertions
-    assert args.build_wikt ^ args.load_wikt ^ args.build ^ args.about ^ bool(args.query), "you need to either load or build a wiktionary"
     assert args.test ^ (args.path != 'test')
 
     if args.about:
@@ -442,6 +464,10 @@ if __name__ == "__main__":
 
     if args.zdl:
         __build_zdl_vectors(data=data)
+
+    if args.ortho:
+        ortho_matrix = __build_ortho_matrix(data)
+        print(ortho_matrix)
         exit()
 
     vector_database = __read_parquet(PATH)
