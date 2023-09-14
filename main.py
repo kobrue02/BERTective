@@ -52,7 +52,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-tr', '--train', action='store_true')
     parser.add_argument('-a', '--about', action='store_true')
     parser.add_argument('-q', '--query', type=str, default=None)
-    parser.add_argument('-o', '--ortho', action='store_true')
+    parser.add_argument('-bo', '--build_ortho', action='store_true')
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -275,6 +275,16 @@ def __build_zdl_vectors(data: DataCorpus):
         print('all batches have been vectorized.')
 
 def __build_ortho_matrix(data: DataCorpus):
+    """
+    takes a DataCorpus as input and calculates an orthography/vector embedding for every text.
+    5 embeddings are generated for each text sample:
+    ancient: matches with ancient orthógraphy set
+    revolutionized: matches with revolutionized orthography set
+    modern: matches with current orthography set
+    error: common spelling errors
+    correct: words that were spelt correct but are commonly misspelt
+    these 5 embeddings are stored as a dict in a dict that has DataObject ID as key and embedding dict as value
+    """
     ortho = OrthoMatrixModel()
     corpus_size = len(data)
     matrix = {}
@@ -283,11 +293,11 @@ def __build_ortho_matrix(data: DataCorpus):
         ID = data[n].content['id']
         text = data[n].text
 
-        ancient = ortho.find_ortho_match_in_text(text, 'ancient')
-        revolutionized = ortho.find_ortho_match_in_text(text, 'revolutionized')
-        modern = ortho.find_ortho_match_in_text(text, 'modern')
-        error = ortho.find_error_match_in_text(text, 'error')
-        correct = ortho.find_error_match_in_text(text, 'correct')
+        ancient = ortho.find_ortho_match_in_text(text, 'ancient').tolist()
+        revolutionized = ortho.find_ortho_match_in_text(text, 'revolutionized').tolist()
+        modern = ortho.find_ortho_match_in_text(text, 'modern').tolist()
+        error = ortho.find_error_match_in_text(text, 'error').tolist()
+        correct = ortho.find_error_match_in_text(text, 'correct').tolist()
 
         matrix[ID] = {
             'embedding_ancient': ancient,
@@ -465,9 +475,10 @@ if __name__ == "__main__":
     if args.zdl:
         __build_zdl_vectors(data=data)
 
-    if args.ortho:
+    if args.build_ortho:
         ortho_matrix = __build_ortho_matrix(data)
-        print(ortho_matrix)
+        with open(f'vectors/orthography_matrix.json', 'w') as f:
+            json.dump(ortho_matrix, f)
         exit()
 
     vector_database = __read_parquet(PATH)
@@ -477,7 +488,7 @@ if __name__ == "__main__":
 
     ids_: list[int] = []
     for item in data:
-        if item.source in ("REDDIT, ACHGUT, GUTENBERG"):
+        if item.source in ("ACHGUT", "REDDIT", "GUTENBERG"):
             if item.author_gender not in ("N/A", "NONE", "", 0, "0", None):
                 ids_.append(item.content['id'])
         else:
@@ -486,7 +497,12 @@ if __name__ == "__main__":
     # get corresponding zdl vectors for each id
     X_zdl = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
     # get corresponding wiktionary vectors
-    X_wikt = [wiktionary_matrix[id] for id in ids_]
+    #X_wikt = [wiktionary_matrix[id] for id in ids_]
+
+    with open('vectors/orthography_matrix.json', 'r') as f:
+        orthoMatrix: dict[str, dict] = json.load(f)
+    
+    X_ortho = [np.array(list(orthoMatrix[str(ID)].values())) for ID in ids_]
 
     # define target labels
     y = [data[id].author_gender for id in ids_]
@@ -539,7 +555,7 @@ if __name__ == "__main__":
         loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
         print("Testing Accuracy:  {:.4f}".format(accuracy))
 
-    def train_model(X: list, vectors: pd.DataFrame, ids_train: list, ids_test: list, y_train: list, y_test: list, source: str = "ZDL"):
+    def train_model(X: list, vectors, ids_train: list, ids_test: list, y_train: list, y_test: list, source: str = "ZDL"):
 
         if source == "ZDL":
             Xtrain = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_train]
@@ -564,15 +580,25 @@ if __name__ == "__main__":
 
             n_inputs, n_outputs = (27, ), y_train.shape[0]
             multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+        
+        elif source == "Ortho":
+
+            Xtrain = [list(orthoMatrix[str(ID)].values()) for ID in ids_train]
+            Xtest = [list(orthoMatrix[str(ID)].values()) for ID in ids_test]
+            X_train: list[tf.Tensor] = tf.stack(Xtrain)
+            X_test: list[tf.Tensor] = tf.stack(Xtest)
+
+            n_inputs, n_outputs = (5, 96), y_train.shape[0]
+            multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
 
     train_model(
-        X=X_wikt, 
-        vectors=wiktionary_matrix, 
+        X=X_ortho, 
+        vectors=orthoMatrix, 
         ids_train=ids_train, 
         ids_test=ids_test, 
         y_train=y_train, 
         y_test=y_test,
-        source="Wikt")
+        source="Ortho")
 
     ### BINARY PREDICTION (e.g. gender)
     def binary():

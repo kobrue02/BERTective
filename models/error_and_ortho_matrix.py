@@ -18,42 +18,45 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.utils import shuffle
 from sklearn.metrics import classification_report
 
-import os
-print(os.path.abspath(os.curdir))
-os.chdir("..")
-
 nlp = spacy.load("de_core_news_sm")
 
 class OrthoMatrixModel:
 
-    def __init__(self, use_model = None) -> None:
+    def __init__(self, use_model = None, ex: bool = False) -> None:
 
-        # TO  BE CLEANED UP LATER
-        #with open("data/reddit/education/Azubis.json", "r", encoding='utf-8') as f:
-        #    self.azubis_data = json.load(f)
-        #with open("data/reddit/education/Studium.json", "r", encoding='utf-8') as f:
-        #    self.studi_data = json.load(f)
-        #with open("data/reddit/dating/beziehungen.json", "r", encoding='utf-8') as f:
-        #    self.bzh_data = json.load(f)
+        """ 
+        This class is used to do a matching between text samples and data which was 
+        sourced from https://www.korrekturen.de/
+        """
+
+        with open("data/reddit/dating/beziehungen.json", "r", encoding='utf-8') as f:
+            self.bzh_data = json.load(f)
         with open("data/annotation/orthography.json", "r", encoding='utf-8') as f:
             self.orthography = json.load(f)
         with open("data/annotation/error_tuples.json", "r", encoding='utf-8') as f:
             self.error_tuples = json.load(f)
+        
+        if ex:
 
-        #reddit_matrix_list = []
+            # TO  BE CLEANED UP LATER
+            with open("data/reddit/education/Azubis.json", "r", encoding='utf-8') as f:
+                self.azubis_data = json.load(f)
+            with open("data/reddit/education/Studium.json", "r", encoding='utf-8') as f:
+                self.studi_data = json.load(f)
 
-        #for item in self.azubis_data["data"]:
-        #    tup = ("Azubi", str(item["selftext"]))
-        #    reddit_matrix_list.append(tup)
+            reddit_matrix_list = []
 
-        #for item in self.studi_data["data"]:
-        #    tup = ("Student", str(item["selftext"]))
-        #    reddit_matrix_list.append(tup)
+            for item in self.azubis_data["data"]:
+                tup = ("Azubi", str(item["selftext"]))
+                reddit_matrix_list.append(tup)
 
-        #self.reddit_matrix = self.__build_reddit_matrix(reddit_matrix_list)
-        #self.use_model = use_model
-        #self.model = self.__build_model()
-        pass
+            for item in self.studi_data["data"]:
+                tup = ("Student", str(item["selftext"]))
+                reddit_matrix_list.append(tup)
+
+            self.reddit_matrix = self.__build_reddit_matrix(reddit_matrix_list)
+            self.use_model = use_model
+            self.model = self.__build_model()
 
 
     def __vector_average(self, vectors: list) -> np.array:
@@ -62,7 +65,7 @@ class OrthoMatrixModel:
             result = np.add(result, vector)
         return np.divide(result, len(vectors))
 
-    def find_ortho_match_in_text(self, text: str, orthography_set: str) -> np.array:
+    def find_ortho_match_in_text(self, text: str, orthography_set: str) -> np.ndarray:
         '''
         generate word embeddings for matches with a given orthography set
             Parameters:
@@ -82,7 +85,7 @@ class OrthoMatrixModel:
             return self.__vector_average(matched_vectors)
     
 
-    def find_error_match_in_text(self, text: str, reference_set: str) -> np.array:
+    def find_error_match_in_text(self, text: str, reference_set: str) -> np.ndarray:
         '''
         generate word embeddings for matches with a common spelling error list
             Parameters:
@@ -162,6 +165,10 @@ class OrthoMatrixModel:
 
 
 if __name__ == "__main__":
+
+    import os
+    print(os.path.abspath(os.curdir))
+    os.chdir("..")
 
     test = OrthoMatrixModel()
     sample = """Wir wollten ursprünglich mehr Blogs sourcen, aber keine guten gefunden: entweder nur wenige Autoren (unnötig) oder anonyme Autoren (bringt nichts) -> muss viele Autoren mit Lebenslauf/Beschreibung geben (Achgut)"""
