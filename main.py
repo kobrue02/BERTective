@@ -7,6 +7,7 @@ from models.wiktionary_matrix import WiktionaryModel
 from models.keras_cnn_implementation import *
 from models.keras_regresssor_implementation import build_regressor
 from models.error_and_ortho_matrix import OrthoMatrixModel
+from models.bare_statistic_ratios import Statistext
 from scraping_tools.wiktionary_api import download_wiktionary
 
 from tqdm import tqdm
@@ -53,6 +54,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-p', '--path', type=str, default='test')
     parser.add_argument('-s', '--save', action='store_true')
     parser.add_argument('-bw', '--build_wikt', action='store_true')
+    parser.add_argument('-bs', '--build_stats', action='store_true')
     parser.add_argument('-tr', '--train', action='store_true')
     parser.add_argument('-a', '--about', action='store_true')
     parser.add_argument('-q', '--query', type=str, default=None)
@@ -249,17 +251,19 @@ def __num_to_str(L: list[float]) -> list[str]:
             4.0: "DE-SOUTH-EAST",
             5.0: "DE-SOUTH-WEST"
         }
-    elif len(set(L)) == 4:
+
+    elif len(set(L)) == 2 and sorted(list(set(L))) == [0.0, 1.0]:
+        labels = {
+            0.0: "female",
+            1.0: "male"
+        }
+    
+    elif 2 <= len(set(L)) <= 4:
         labels = {
             0.0: "finished_highschool",
             1.0: "has_phd",
             2.0: "has_apprentice",
             3.0: "has_master"
-        }
-    elif len(set(L)) == 2:
-        labels = {
-            0.0: "female",
-            1.0: "male"
         }
 
     return [labels[i] for i in L]
@@ -354,6 +358,23 @@ def __build_ortho_matrix(data: DataCorpus):
             'embedding_correct': correct
         }
 
+    return matrix
+
+def __build_statistical_matrix(data: DataCorpus) -> dict[str, dict[str, float]]:
+    corpus_size = len(data)
+    matrix = {}
+    for n in tqdm(range(corpus_size)):
+
+        ID = data[n].content['id']
+        text = data[n].text
+
+        statistecs = Statistext(text)
+        matrix[ID] = {
+            'CWR': statistecs.char_word_ratio,
+            'CNR': statistecs.cap_nocap_ratio,
+            'VCR': statistecs.vowel_cons_ratio,
+            'WSR': statistecs.word_sent_ratio
+        }
     return matrix
 
 def __zero_pad(X: list, maxVal: int) -> list:
@@ -451,7 +472,7 @@ def __plot_items(items: list[DataObject]):
     sns.barplot(x=list(regiolect_dist.keys()), y=list(regiolect_dist.values()))
     plt.show()
         
-def __evaluate(model, X_test: list[float], y_test: list[str]) -> str:
+def __evaluate(model: Sequential, X_test: list[float], y_test: list[str]) -> str:
     y_pred = model.predict(X_test)
     # set the labels and predictions to same type
     # so that we can generate a classification report
@@ -525,8 +546,6 @@ if __name__ == "__main__":
         wiktionary_matrix = WiktionaryModel(source=data)
         wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
     
-        
-
     if args.build_zdl:
         __build_zdl_vectors(data=data)
 
@@ -534,6 +553,12 @@ if __name__ == "__main__":
         ortho_matrix = __build_ortho_matrix(data)
         with open(f'vectors/orthography_matrix.json', 'w') as f:
             json.dump(ortho_matrix, f)
+        exit()
+
+    if args.build_stats:
+        statistext = __build_statistical_matrix(data)
+        with open(f'vectors/statistical_matrix.json', 'w') as f:
+            json.dump(statistext, f)
         exit()
 
     vector_database = __read_parquet(PATH)
@@ -565,6 +590,13 @@ if __name__ == "__main__":
         source = "Ortho"
         vectors = orthoMatrix
 
+    if str(args.feature).capitalize() == "Stat":
+        with open('vectors/statistical_matrix.json', 'r') as f:
+            statistext: dict[str, dict] = json.load(f)
+        X = [np.array(list(statistext[str(ID)].values())) for ID in ids_]
+        source = "Stat"
+        vectors = statistext
+
     elif str(args.feature).upper() == "ZDL":
         X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
         source = "ZDL"
@@ -590,7 +622,6 @@ if __name__ == "__main__":
     y_train = tf.stack(__to_num(y_train))
     y_test = tf.stack(__to_num(y_test_))
 
-
     def RNN(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
         model = rnn_model(n_inputs, n_outputs)
         print(model.summary())
@@ -610,18 +641,33 @@ if __name__ == "__main__":
     def multiclass(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
         model = multi_class_prediction_model(n_inputs, n_outputs)
         print(model.summary())
-        early_stopping = EarlyStopping(monitor='val_loss', patience=4, mode='auto')
+        early_stopping = EarlyStopping(monitor='val_loss', patience=8, mode='auto')
         try:
             history = model.fit(X_train, y_train, 
                                 epochs=128, 
                                 verbose=True, 
                                 validation_data=(X_test, y_test), 
-                                batch_size=128,
+                                batch_size=64,
                                 use_multiprocessing=True,
                                 workers=16,
                                 callbacks = [early_stopping])
         except KeyboardInterrupt:
             pass
+
+        return model
+    
+    ### BINARY PREDICTION (e.g. gender)
+    def binary(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
+        model = binary_prediction_model(n_inputs)
+        print(model.summary())
+
+        history = model.fit(X_train, y_train, 
+                            epochs=256, 
+                            verbose=True, 
+                            validation_data=(X_test, y_test), 
+                            batch_size=32,
+                            use_multiprocessing=True,
+                            workers=6)
 
         return model
 
@@ -631,7 +677,7 @@ if __name__ == "__main__":
                     ids_test: list, 
                     y_train: list, 
                     y_test: list, 
-                    source: str = "ZDL") -> tuple:
+                    source: str = "Ortho") -> tuple[Sequential, list[float], list[str]]:
 
         if source == "ZDL":
             Xtrain = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_train]
@@ -659,15 +705,26 @@ if __name__ == "__main__":
         
         elif source == "Ortho":
 
-            Xtrain = [list(orthoMatrix[str(ID)].values()) for ID in ids_train]
-            Xtest = [list(orthoMatrix[str(ID)].values()) for ID in ids_test]
+            Xtrain = [list(vectors[str(ID)].values()) for ID in ids_train]
+            Xtest = [list(vectors[str(ID)].values()) for ID in ids_test]
             X_train: list[tf.Tensor] = tf.stack(Xtrain)
             X_test: list[tf.Tensor] = tf.stack(Xtest)
 
             n_inputs, n_outputs = (5, 96), y_train.shape[0]
             model = multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
 
+        elif source == "Stat":
+
+            Xtrain = [list(vectors[str(ID)].values()) for ID in ids_train]
+            Xtest = [list(vectors[str(ID)].values()) for ID in ids_test]
+            X_train: list[tf.Tensor] = tf.stack(Xtrain)
+            X_test: list[tf.Tensor] = tf.stack(Xtest)
+
+            n_inputs, n_outputs = (4, ), y_train.shape[0]
+            model = multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+
         return model, X_test, y_test_
+    
     
     model, X_test, y_test = train_model(
                                 X=X, 
@@ -682,25 +739,5 @@ if __name__ == "__main__":
     report = __evaluate(model, X_test, y_test)
     print(report)
 
-    ### BINARY PREDICTION (e.g. gender)
-    def binary():
-        model = binary_prediction_model(n_inputs)
-        print(model.summary())
-
-        history = model.fit(X_train, y_train, 
-                            epochs=256, 
-                            verbose=True, 
-                            validation_data=(X_test, y_test), 
-                            batch_size=32,
-                            use_multiprocessing=True,
-                            workers=6)
-
-        loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
-        print("Training Accuracy: {:.4f}".format(accuracy))
-        loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
-        print("Testing Accuracy:  {:.4f}".format(accuracy))
-
-    # binary()
-
-    #multiclass()    
+    # binary() 
     exit() 
