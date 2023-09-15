@@ -53,6 +53,10 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-a', '--about', action='store_true')
     parser.add_argument('-q', '--query', type=str, default=None)
     parser.add_argument('-bo', '--build_ortho', action='store_true')
+    parser.add_argument('-age', '--age', action='store_true')
+    parser.add_argument('-gender', '--gender', action='store_true')
+    parser.add_argument('-regio', '--regiolect', action='store_true')
+    parser.add_argument('-edu', '--education', action='store_true')
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -486,13 +490,22 @@ if __name__ == "__main__":
     if not args.train:
         exit()
 
+    feature = {args.education: 'author_education',
+               args.age: 'author_age',
+               args.regiolect: 'author_regiolect',
+               args.gender: 'author_gender'}
+    F = args.education or args.age or args.regiolect or args.gender
+    
     ids_: list[int] = []
     for item in data:
         if item.source in ("ACHGUT", "REDDIT", "GUTENBERG"):
-            if item.author_gender not in ("N/A", "NONE", "", 0, "0", None):
+            if item.content[feature[F]] not in ("N/A", "NONE", "", 0, "0", None):
                 ids_.append(item.content['id'])
         else:
             continue
+    
+     # define target labels
+    y = [data[id].content[feature[F]] for id in ids_]
     
     # get corresponding zdl vectors for each id
     X_zdl = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
@@ -503,9 +516,6 @@ if __name__ == "__main__":
         orthoMatrix: dict[str, dict] = json.load(f)
     
     X_ortho = [np.array(list(orthoMatrix[str(ID)].values())) for ID in ids_]
-
-    # define target labels
-    y = [data[id].author_gender for id in ids_]
 
     # shuffle the training data
     X, y = shuffle(ids_, y, random_state=3)
@@ -546,7 +556,7 @@ if __name__ == "__main__":
                             epochs=128, 
                             verbose=True, 
                             validation_data=(X_test, y_test), 
-                            batch_size=32,
+                            batch_size=128,
                             use_multiprocessing=True,
                             workers=16)
 
