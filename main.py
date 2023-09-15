@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
 
 import argparse
 import json
@@ -25,6 +26,9 @@ import os
 import pandas as pd
 import seaborn as sns
 import tensorflow as tf
+
+from tensorflow.python.ops.numpy_ops import np_config
+np_config.enable_numpy_behavior()
 
 def __make_directories(path: str):
     os.makedirs(path, exist_ok=True)
@@ -220,6 +224,31 @@ def __to_num(L: list) -> list[float]:
         return [c[item] for item in L]
     else:
         return L
+
+def __num_to_str(L: list[float]) -> list[str]:
+    if len(set(L)) == 6:
+        labels = {
+            0.0: "DE-MIDDLE-EAST",
+            1.0: "DE-MIDDLE-WEST",
+            2.0: "DE-NORTH-EAST",
+            3.0: "DE-NORTH-WEST",
+            4.0: "DE-SOUTH-EAST",
+            5.0: "DE-SOUTH-WEST"
+        }
+    elif len(set(L)) == 4:
+        labels = {
+            0.0: "finished_highschool",
+            1.0: "has_phd",
+            2.0: "has_apprentice",
+            3.0: "has_master"
+        }
+    elif len(set(L)) == 2:
+        labels = {
+            0.0: "female",
+            1.0: "male"
+        }
+    
+    return [labels[i] for i in L]
 
 def __build_zdl_vectors(data: DataCorpus):
     """
@@ -495,7 +524,7 @@ if __name__ == "__main__":
                args.regiolect: 'author_regiolect',
                args.gender: 'author_gender'}
     F = args.education or args.age or args.regiolect or args.gender
-    
+
     ids_: list[int] = []
     for item in data:
         if item.source in ("ACHGUT", "REDDIT", "GUTENBERG"):
@@ -524,12 +553,12 @@ if __name__ == "__main__":
     for item in list(set(y)):
         print(f"{item}: {list(y).count(item)}")
 
-    ids_train, ids_test, y_train, y_test = train_test_split(
+    ids_train, ids_test, y_train, y_test_ = train_test_split(
                 X, y, test_size=0.2, random_state=42) #, stratify=y)
     
     # convert labels to tensor stack
     y_train = tf.stack(__to_num(y_train))
-    y_test = tf.stack(__to_num(y_test))
+    y_test = tf.stack(__to_num(y_test_))
 
 
     def RNN(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
@@ -560,10 +589,20 @@ if __name__ == "__main__":
                             use_multiprocessing=True,
                             workers=16)
 
-        loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
-        print("Training Accuracy: {:.4f}".format(accuracy))
-        loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
-        print("Testing Accuracy:  {:.4f}".format(accuracy))
+        #loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
+        #print("Training Accuracy: {:.4f}".format(accuracy))
+        #loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
+        #print("Testing Accuracy:  {:.4f}".format(accuracy))
+
+        y_pred = model.predict(X_test)
+        y_pred = np.round(y_pred)
+        y_pred = np.argmax(y_pred, axis=1)
+
+        y_test = __num_to_str([y.numpy().astype(float) for y in y_test])
+        y_pred = __num_to_str([y for y in y_pred])
+        report = classification_report(y_test, y_pred)
+        print(report)
+
 
     def train_model(X: list, vectors, ids_train: list, ids_test: list, y_train: list, y_test: list, source: str = "ZDL"):
 
@@ -629,7 +668,6 @@ if __name__ == "__main__":
         print("Testing Accuracy:  {:.4f}".format(accuracy))
 
     # binary()
-
 
     #multiclass()    
     exit() 
