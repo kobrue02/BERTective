@@ -21,7 +21,7 @@ def multi_class_prediction_model(n_inputs, n_outputs):
     model.add(Dropout(0.25))
     model.add(Dense(64, activation='relu'))
     model.add(Dropout(0.25))
-    model.add(Dense(n_outputs, activation='sigmoid'))
+    model.add(Dense(n_outputs, activation='softmax'))
     model.compile(
         loss=SparseCategoricalCrossentropy(
         from_logits=True), 
