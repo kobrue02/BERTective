@@ -45,7 +45,7 @@ def __init_parser() -> argparse.ArgumentParser:
     :returns: ArgumentParser()
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('-z', '--zdl', action='store_true', help='build zdl vector database')
+    parser.add_argument('-bz', '--build_zdl', action='store_true', help='build zdl vector database')
     parser.add_argument('-dd', '--download_data', action='store_true', help='download data resources')
     parser.add_argument('-dw', '--download_wikt', action='store_true', help='download wiktionary resources')
     parser.add_argument('-t', '--test', action='store_true', help='sets PATH to "test"')
@@ -53,7 +53,6 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-p', '--path', type=str, default='test')
     parser.add_argument('-s', '--save', action='store_true')
     parser.add_argument('-bw', '--build_wikt', action='store_true')
-    parser.add_argument('-lw', '--load_wikt', action='store_true')
     parser.add_argument('-tr', '--train', action='store_true')
     parser.add_argument('-a', '--about', action='store_true')
     parser.add_argument('-q', '--query', type=str, default=None)
@@ -62,6 +61,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-gender', '--gender', action='store_true')
     parser.add_argument('-regio', '--regiolect', action='store_true')
     parser.add_argument('-edu', '--education', action='store_true')
+    parser.add_argument('-f', '--feature', type=str, default="ortho")
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -227,6 +227,19 @@ def __to_num(L: list) -> list[float]:
         return L
 
 def __num_to_str(L: list[float]) -> list[str]:
+    """ convert the numerical labels back to their true names """
+    if isinstance(L[0], str):
+        genders = {"m": "male",
+                "male": "male",
+                "f": "female",
+                "female": "female"}
+        if L[0] in list(genders.keys()):
+            return [genders[k] for k in L]
+        else:
+            return L
+    else:
+        L = [float(i) for i in L]
+
     if len(set(L)) == 6:
         labels = {
             0.0: "DE-MIDDLE-EAST",
@@ -248,7 +261,7 @@ def __num_to_str(L: list[float]) -> list[str]:
             0.0: "female",
             1.0: "male"
         }
-    else: return L
+
     return [labels[i] for i in L]
 
 def __build_zdl_vectors(data: DataCorpus):
@@ -438,7 +451,16 @@ def __plot_items(items: list[DataObject]):
     sns.barplot(x=list(regiolect_dist.keys()), y=list(regiolect_dist.values()))
     plt.show()
         
-    
+def __evaluate(model, X_test: list[float], y_test: list[str]) -> str:
+    y_pred = model.predict(X_test)
+    # set the labels and predictions to same type
+    # so that we can generate a classification report
+    y_pred = np.round(y_pred)
+    y_pred = np.argmax(y_pred, axis=1)
+    y_test = __num_to_str([y for y in y_test])
+    y_pred = __num_to_str([y for y in y_pred])
+    report = classification_report(y_test, y_pred)
+    return report
 
 if __name__ == "__main__":
 
@@ -452,7 +474,7 @@ if __name__ == "__main__":
 
     if args.about:
         remaining = [
-            args.zdl,
+            args.build_zdl,
             args.download_data,
             args.download_wikt,
             args.test,
@@ -503,10 +525,9 @@ if __name__ == "__main__":
         wiktionary_matrix = WiktionaryModel(source=data)
         wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
     
-    if args.load_wikt:
-        wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
+        
 
-    if args.zdl:
+    if args.build_zdl:
         __build_zdl_vectors(data=data)
 
     if args.build_ortho:
@@ -536,17 +557,25 @@ if __name__ == "__main__":
     
      # define target labels
     y = [data[id].content[feature[F]] for id in ids_]
-    
-    # get corresponding zdl vectors for each id
-    X_zdl = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
-    # get corresponding wiktionary vectors
-    #X_wikt = [wiktionary_matrix[id] for id in ids_]
 
-    with open('vectors/orthography_matrix.json', 'r') as f:
-        orthoMatrix: dict[str, dict] = json.load(f)
-    
-    X_ortho = [np.array(list(orthoMatrix[str(ID)].values())) for ID in ids_]
+    if str(args.feature).capitalize() == "Ortho":
+        with open('vectors/orthography_matrix.json', 'r') as f:
+            orthoMatrix: dict[str, dict] = json.load(f)
+        X = [np.array(list(orthoMatrix[str(ID)].values())) for ID in ids_]
+        source = "Ortho"
+        vectors = orthoMatrix
 
+    elif str(args.feature).upper() == "ZDL":
+        X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
+        source = "ZDL"
+        vectors = vector_database
+
+    elif str(args.feature).capitalize() == "Wikt":
+        wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
+        X = [wiktionary_matrix[id] for id in ids_]
+        source = "Wikt"
+        vectors = wiktionary_matrix
+    
     # shuffle the training data
     X, y = shuffle(ids_, y, random_state=3)
     
@@ -565,18 +594,18 @@ if __name__ == "__main__":
     def RNN(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
         model = rnn_model(n_inputs, n_outputs)
         print(model.summary())
-        history = model.fit(X_train, y_train, 
-                            epochs=64, 
-                            verbose=True, 
-                            validation_data=(X_test, y_test), 
-                            batch_size=128,
-                            use_multiprocessing=True,
-                            workers=16)
+        try:
+            history = model.fit(X_train, y_train, 
+                                epochs=64, 
+                                verbose=True, 
+                                validation_data=(X_test, y_test), 
+                                batch_size=128,
+                                use_multiprocessing=True,
+                                workers=16)
+        except KeyboardInterrupt:
+            pass
 
-        loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
-        print("Training Accuracy: {:.4f}".format(accuracy))
-        loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
-        print("Testing Accuracy:  {:.4f}".format(accuracy))
+        return model
 
     def multiclass(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
         model = multi_class_prediction_model(n_inputs, n_outputs)
@@ -593,22 +622,16 @@ if __name__ == "__main__":
                                 callbacks = [early_stopping])
         except KeyboardInterrupt:
             pass
-        #loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
-        #print("Training Accuracy: {:.4f}".format(accuracy))
-        #loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
-        #print("Testing Accuracy:  {:.4f}".format(accuracy))
 
-        y_pred = model.predict(X_test)
-        y_pred = np.round(y_pred)
-        y_pred = np.argmax(y_pred, axis=1)
+        return model
 
-        y_test = __num_to_str([y.numpy().astype(float) for y in y_test])
-        y_pred = __num_to_str([y for y in y_pred])
-        report = classification_report(y_test, y_pred)
-        print(report)
-
-
-    def train_model(X: list, vectors, ids_train: list, ids_test: list, y_train: list, y_test: list, source: str = "ZDL"):
+    def train_model(X: list, 
+                    vectors, 
+                    ids_train: list, 
+                    ids_test: list, 
+                    y_train: list, 
+                    y_test: list, 
+                    source: str = "ZDL") -> tuple:
 
         if source == "ZDL":
             Xtrain = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_train]
@@ -622,7 +645,7 @@ if __name__ == "__main__":
             X_test: list[tf.Tensor] = tf.stack(__zero_pad(Xtest, maxVal))
 
             n_inputs, n_outputs = (1, maxVal, 6), y_train.shape[0]
-            RNN(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+            model = RNN(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
 
         elif source == "Wikt":
 
@@ -632,7 +655,7 @@ if __name__ == "__main__":
             X_test: list[tf.Tensor] = tf.stack(Xtest)
 
             n_inputs, n_outputs = (27, ), y_train.shape[0]
-            multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+            model = multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
         
         elif source == "Ortho":
 
@@ -642,16 +665,22 @@ if __name__ == "__main__":
             X_test: list[tf.Tensor] = tf.stack(Xtest)
 
             n_inputs, n_outputs = (5, 96), y_train.shape[0]
-            multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+            model = multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
 
-    train_model(
-        X=X_ortho, 
-        vectors=orthoMatrix, 
-        ids_train=ids_train, 
-        ids_test=ids_test, 
-        y_train=y_train, 
-        y_test=y_test,
-        source="Ortho")
+        return model, X_test, y_test_
+    
+    model, X_test, y_test = train_model(
+                                X=X, 
+                                vectors=vectors, 
+                                ids_train=ids_train, 
+                                ids_test=ids_test, 
+                                y_train=y_train, 
+                                y_test=y_test,
+                                source=source
+                            )
+
+    report = __evaluate(model, X_test, y_test)
+    print(report)
 
     ### BINARY PREDICTION (e.g. gender)
     def binary():
