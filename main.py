@@ -12,6 +12,7 @@ from scraping_tools.wiktionary_api import download_wiktionary
 from tqdm import tqdm
 from langdetect import detect, DetectorFactory, lang_detect_exception
 from keras.backend import clear_session
+from keras.callbacks import EarlyStopping
 import matplotlib.pyplot as plt
 
 from sklearn.utils import shuffle
@@ -247,7 +248,7 @@ def __num_to_str(L: list[float]) -> list[str]:
             0.0: "female",
             1.0: "male"
         }
-    
+    else: return L
     return [labels[i] for i in L]
 
 def __build_zdl_vectors(data: DataCorpus):
@@ -580,15 +581,18 @@ if __name__ == "__main__":
     def multiclass(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
         model = multi_class_prediction_model(n_inputs, n_outputs)
         print(model.summary())
-
-        history = model.fit(X_train, y_train, 
-                            epochs=128, 
-                            verbose=True, 
-                            validation_data=(X_test, y_test), 
-                            batch_size=128,
-                            use_multiprocessing=True,
-                            workers=16)
-
+        early_stopping = EarlyStopping(monitor='val_loss', patience=4, mode='auto')
+        try:
+            history = model.fit(X_train, y_train, 
+                                epochs=128, 
+                                verbose=True, 
+                                validation_data=(X_test, y_test), 
+                                batch_size=128,
+                                use_multiprocessing=True,
+                                workers=16,
+                                callbacks = [early_stopping])
+        except KeyboardInterrupt:
+            pass
         #loss, accuracy = model.evaluate(X_train, y_train, verbose=False)
         #print("Training Accuracy: {:.4f}".format(accuracy))
         #loss, accuracy = model.evaluate(X_test, y_test, verbose=False)
