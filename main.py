@@ -15,6 +15,7 @@ from langdetect import detect, DetectorFactory, lang_detect_exception
 from keras.backend import clear_session
 from keras.callbacks import EarlyStopping
 import matplotlib.pyplot as plt
+from typing import Any
 
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
@@ -361,6 +362,9 @@ def __build_ortho_matrix(data: DataCorpus):
     return matrix
 
 def __build_statistical_matrix(data: DataCorpus) -> dict[str, dict[str, float]]:
+    """
+    takes a DataCorpus as input and calculates bare statistic features for each text.
+    """
     corpus_size = len(data)
     matrix = {}
     for n in tqdm(range(corpus_size)):
@@ -483,6 +487,37 @@ def __evaluate(model: Sequential, X_test: list[float], y_test: list[str]) -> str
     report = classification_report(y_test, y_pred)
     return report
 
+def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
+
+    if feature.capitalize() == "Ortho":
+        with open('vectors/orthography_matrix.json', 'r') as f:
+            orthoMatrix: dict[str, dict] = json.load(f)
+        X = [np.array(list(orthoMatrix[str(ID)].values())) for ID in ids_]
+        source = "Ortho"
+        vectors = orthoMatrix
+
+    elif feature.capitalize() == "Stat":
+        with open('vectors/statistical_matrix.json', 'r') as f:
+            statistext: dict[str, dict] = json.load(f)
+        X = [np.array(list(statistext[str(ID)].values())) for ID in ids_]
+        source = "Stat"
+        vectors = statistext
+
+    elif feature.upper() == "ZDL":
+        vector_database = __read_parquet(PATH)
+        X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
+        source = "ZDL"
+        vectors = vector_database
+
+    elif feature.capitalize() == "Wikt":
+        wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
+        X = [wiktionary_matrix[id] for id in ids_]
+        source = "Wikt"
+        vectors = wiktionary_matrix
+
+    return X, source, vectors
+
+
 if __name__ == "__main__":
 
     clear_session()  # clear any previous training sessions
@@ -521,9 +556,6 @@ if __name__ == "__main__":
     if args.download_wikt:
         download_wiktionary()
 
-    with open('data/wiktionary/wiktionary.json', 'r', encoding='utf-8') as f:
-        wiktionary: dict = json.load(f)
-
     data = DataCorpus()
 
     # if we want to build corpus
@@ -561,8 +593,6 @@ if __name__ == "__main__":
             json.dump(statistext, f)
         exit()
 
-    vector_database = __read_parquet(PATH)
-
     if not args.train:
         exit()
 
@@ -583,30 +613,7 @@ if __name__ == "__main__":
      # define target labels
     y = [data[id].content[feature[F]] for id in ids_]
 
-    if str(args.feature).capitalize() == "Ortho":
-        with open('vectors/orthography_matrix.json', 'r') as f:
-            orthoMatrix: dict[str, dict] = json.load(f)
-        X = [np.array(list(orthoMatrix[str(ID)].values())) for ID in ids_]
-        source = "Ortho"
-        vectors = orthoMatrix
-
-    if str(args.feature).capitalize() == "Stat":
-        with open('vectors/statistical_matrix.json', 'r') as f:
-            statistext: dict[str, dict] = json.load(f)
-        X = [np.array(list(statistext[str(ID)].values())) for ID in ids_]
-        source = "Stat"
-        vectors = statistext
-
-    elif str(args.feature).upper() == "ZDL":
-        X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
-        source = "ZDL"
-        vectors = vector_database
-
-    elif str(args.feature).capitalize() == "Wikt":
-        wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
-        X = [wiktionary_matrix[id] for id in ids_]
-        source = "Wikt"
-        vectors = wiktionary_matrix
+    X, source, vectors = __get_training_data(args.feature)
     
     # shuffle the training data
     X, y = shuffle(ids_, y, random_state=3)
@@ -724,8 +731,7 @@ if __name__ == "__main__":
             model = multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
 
         return model, X_test, y_test_
-    
-    
+     
     model, X_test, y_test = train_model(
                                 X=X, 
                                 vectors=vectors, 
