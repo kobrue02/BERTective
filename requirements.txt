@@ -12,3 +12,4 @@ torch
 fastavro
 keras
 scikeras
+morfessor
