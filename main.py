@@ -65,6 +65,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-regio', '--regiolect', action='store_true')
     parser.add_argument('-edu', '--education', action='store_true')
     parser.add_argument('-f', '--feature', type=str, default="ortho")
+    parser.add_argument('-m', '--model', type=str, default='multiclass')
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -527,6 +528,7 @@ if __name__ == "__main__":
 
     # some assertions
     assert args.test ^ (args.path != 'test')
+    assert args.model in ["rnn", "multiclass", "binary"]
 
     if args.about:
         remaining = [
@@ -684,7 +686,15 @@ if __name__ == "__main__":
                     ids_test: list, 
                     y_train: list, 
                     y_test: list, 
-                    source: str = "Ortho") -> tuple[Sequential, list[float], list[str]]:
+                    source: str = "Ortho",
+                    model_type: str = "multiclass") -> tuple[Sequential, list[float], list[str]]:
+        
+        model_select = {
+            "rnn": RNN,
+            "multiclass": multiclass,
+            "binary": binary
+        }
+        model_ = model_select.get(model_type)
 
         if source == "ZDL":
             Xtrain = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_train]
@@ -698,7 +708,7 @@ if __name__ == "__main__":
             X_test: list[tf.Tensor] = tf.stack(__zero_pad(Xtest, maxVal))
 
             n_inputs, n_outputs = (1, maxVal, 6), y_train.shape[0]
-            model = RNN(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+            model = model_(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
 
         elif source == "Wikt":
 
@@ -708,7 +718,7 @@ if __name__ == "__main__":
             X_test: list[tf.Tensor] = tf.stack(Xtest)
 
             n_inputs, n_outputs = (27, ), y_train.shape[0]
-            model = multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+            model = model_(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
         
         elif source == "Ortho":
 
@@ -718,7 +728,7 @@ if __name__ == "__main__":
             X_test: list[tf.Tensor] = tf.stack(Xtest)
 
             n_inputs, n_outputs = (5, 96), y_train.shape[0]
-            model = multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+            model = model_(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
 
         elif source == "Stat":
 
@@ -739,7 +749,8 @@ if __name__ == "__main__":
                                 ids_test=ids_test, 
                                 y_train=y_train, 
                                 y_test=y_test,
-                                source=source
+                                source=source,
+                                model_type=args.model
                             )
 
     report = __evaluate(model, X_test, y_test)
