@@ -15,11 +15,11 @@ from keras.losses import SparseCategoricalCrossentropy
 def multi_class_prediction_model(n_inputs, n_outputs):
     model = Sequential()
     model.add(Flatten(input_shape=n_inputs))
-    model.add(Dense(256, activation='relu'))
+    model.add(Dense(128, activation='relu'))
     model.add(Dropout(0.25))
     model.add(Dense(64, activation='relu'))
     model.add(Dropout(0.25))
-    model.add(Dense(64, activation='relu'))
+    model.add(Dense(32, activation='relu'))
     model.add(Dropout(0.25))
     model.add(Dense(n_outputs, activation='softmax'))
     model.compile(
@@ -64,7 +64,7 @@ def rnn_model(n_inputs: tuple, n_outputs):
     model.add(Bidirectional(LSTM(64, return_sequences=True)))
     model.add(Dropout(0.25))
     model.add(Bidirectional(LSTM(32)))
-    model.add(Dense(n_outputs, activation='sigmoid'))
+    model.add(Dense(n_outputs, activation='softmax'))
     model.compile(
         loss=SparseCategoricalCrossentropy(
         from_logits=True), 
