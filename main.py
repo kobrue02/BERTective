@@ -66,6 +66,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-edu', '--education', action='store_true')
     parser.add_argument('-f', '--feature', type=str, default="ortho")
     parser.add_argument('-m', '--model', type=str, default='multiclass')
+    parser.add_argument('-src', '--source', type=str, nargs='*', default=["ACHGUT", "REDDIT", "GUTENBERG"])
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -244,6 +245,9 @@ def __num_to_str(L: list[float]) -> list[str]:
     else:
         L = [float(i) for i in L]
 
+    if not all(t in [0.0, 1.0, 2.0, 3.0, 4.0, 5.0] for t in L):
+        return L
+
     if len(set(L)) == 6:
         labels = {
             0.0: "DE-MIDDLE-EAST",
@@ -254,7 +258,7 @@ def __num_to_str(L: list[float]) -> list[str]:
             5.0: "DE-SOUTH-WEST"
         }
 
-    elif len(set(L)) == 2 and sorted(list(set(L))) == [0.0, 1.0]:
+    elif 1 <= len(set(L)) <= 2 and all(t in [0.0, 1.0] for t in L):
         labels = {
             0.0: "female",
             1.0: "male"
@@ -606,7 +610,7 @@ if __name__ == "__main__":
 
     ids_: list[int] = []
     for item in data:
-        if item.source in ("ACHGUT", "REDDIT", "GUTENBERG"):
+        if item.source in args.source:
             if item.content[feature[F]] not in ("N/A", "NONE", "", 0, "0", None):
                 ids_.append(item.content['id'])
         else:
@@ -615,6 +619,7 @@ if __name__ == "__main__":
      # define target labels
     y = [data[id].content[feature[F]] for id in ids_]
 
+    # get training data
     X, source, vectors = __get_training_data(args.feature)
     
     # shuffle the training data
