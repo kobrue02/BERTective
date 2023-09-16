@@ -33,7 +33,7 @@ import tensorflow as tf
 from tensorflow.python.ops.numpy_ops import np_config
 np_config.enable_numpy_behavior()
 
-def __make_directories(path: str):
+def __make_directories(path: str) -> None:
     os.makedirs(path, exist_ok=True)
     os.makedirs(f'{path}/achse', exist_ok=True)
     os.makedirs(f'{path}/annotation', exist_ok=True)
@@ -105,7 +105,7 @@ def __author_dict_to_dataobject() -> list[DataObject]:
     
     return dataobjs
 
-def __reddit_locales_to_datacorpus(path: str = "data", corpus: DataCorpus = None):
+def __reddit_locales_to_datacorpus(path: str = "data", corpus: DataCorpus = None) -> DataCorpus:
     """ 
     finds all files in the reddit locale folder and adds them to a DataCorpus 
     :param path: defaults to data. can be changed to something else for testing, e.g. 'test'
@@ -137,7 +137,7 @@ def __reddit_locales_to_datacorpus(path: str = "data", corpus: DataCorpus = None
                                 corpus.add_item(obj)
     return corpus
     
-def __achgut_to_datacorpus(path: str, corpus: DataCorpus):
+def __achgut_to_datacorpus(path: str, corpus: DataCorpus) -> DataCorpus:
     """ reads achgut blog posts and adds to DataCorpus """
     achse = pd.read_parquet(f'{path}/achse/achse_des_guten_annotated_items.parquet')
 
@@ -154,7 +154,7 @@ def __achgut_to_datacorpus(path: str, corpus: DataCorpus):
 
     return corpus
 
-def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
+def __reddit_to_datacorpus(path: str, corpus: DataCorpus) -> DataCorpus:
     """ 
     reads reddit posts from annotated parquet file
     and adds to DataCorpus 
@@ -180,7 +180,7 @@ def __reddit_to_datacorpus(path: str, corpus: DataCorpus):
 
     return corpus                             
 
-def __gutenberg_to_datacorpus(path: str, corpus: DataCorpus):
+def __gutenberg_to_datacorpus(path: str, corpus: DataCorpus) -> DataCorpus:
     gutenberg = __author_dict_to_dataobject()
     for item in tqdm(gutenberg):
         corpus.add_item(item)
@@ -274,7 +274,7 @@ def __num_to_str(L: list[float]) -> list[str]:
 
     return [labels[i] for i in L]
 
-def __build_zdl_vectors(data: DataCorpus):
+def __build_zdl_vectors(data: DataCorpus) -> None:
     """
     This function uses ZDLVectorMatrix to generate ZDL vectors for texts in a DataCorpus.\n
     Each text will be tokenized, and each token gets embedded in a 6-dimensional vector.\n
@@ -331,7 +331,7 @@ def __build_zdl_vectors(data: DataCorpus):
     else:
         print('all batches have been vectorized.')
 
-def __build_ortho_matrix(data: DataCorpus):
+def __build_ortho_matrix(data: DataCorpus) -> dict[str, dict[str, np.ndarray]]:
     """
     takes a DataCorpus as input and calculates an orthography/vector embedding for every text.
     5 embeddings are generated for each text sample:
@@ -386,7 +386,7 @@ def __build_statistical_matrix(data: DataCorpus) -> dict[str, dict[str, float]]:
         }
     return matrix
 
-def __zero_pad(X: list, maxVal: int) -> list:
+def __zero_pad(X: list, maxVal: int) -> list[tf.Tensor]:
 
     """
     Given the longest document in a corpus, this method will
@@ -436,7 +436,7 @@ def __read_parquet(path: str) -> pd.DataFrame:
     vector_database = pd.concat(dataframe_list)
     return vector_database
 
-def __get_query(data: DataCorpus, query: str):
+def __get_query(data: DataCorpus, query: str) -> list[DataObject]:
 
     label = query.split("=")[0]
     value = query.split("=")[1]
@@ -445,7 +445,7 @@ def __get_query(data: DataCorpus, query: str):
 
     return items
 
-def __plot_items(items: list[DataObject]):
+def __plot_items(items: list[DataObject]) -> None:
 
     age_dist = {}
     gender_dist = {}
@@ -522,10 +522,7 @@ def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
 
     return X, source, vectors
 
-
-if __name__ == "__main__":
-
-    clear_session()  # clear any previous training sessions
+def __setup() -> argparse.Namespace:
     
     parser = __init_parser()
     args = parser.parse_args()
@@ -546,6 +543,26 @@ if __name__ == "__main__":
             args.train
         ]
         assert not any(remaining), "-a (--about) can only be used on its own."
+    return args
+
+# PSEUDO CODE
+def __predict(model: Sequential, input: str) -> str:
+
+    # data = preprocess(input)
+    
+    # pred = model.predict(data)
+
+    # output_label = ""
+    # y_pred = np.round(y_pred)
+    # output_label = np.argmax(y_pred, axis=1)
+    # output_label = __num_to_str(output_label, feature)
+
+    pass
+
+if __name__ == "__main__":
+
+    clear_session()  # clear any previous training sessions
+    args = __setup()
     
     if args.test:
         PATH = "test"
