@@ -14,3 +14,5 @@ keras
 scikeras
 morfessor
 trafilatura
+pyarrow
+fastparquet
