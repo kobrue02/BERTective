@@ -13,3 +13,4 @@ fastavro
 keras
 scikeras
 morfessor
+trafilatura
