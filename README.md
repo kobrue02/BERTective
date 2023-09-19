@@ -10,7 +10,7 @@ Das Projekt befindet sich noch in der tiefsten Entwicklungsphase, daher gibt es 
 Nicht optimiert für Mac OSX.  
 
 downloading all data and setting up BERTective:  
-`pip install -r requirements.txt`   
+`pip install -r requirements.txt`   # da leider alle Daten gecrawlt werden müssen und nicht von uns offengelegt werden dürfen, ist dieser schritt sehr zeitintensiv  
 `python main.py -t -dd -dw`   
 `python main.py -t -b -s`  
 `python main.py -t -bo -bw -bz -bs`  
