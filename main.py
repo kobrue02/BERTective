@@ -251,7 +251,7 @@ def __num_to_str(L: list[float], key: str) -> list[str]:
                     1.0: 'm'
                 }
             }
-    if isinstance(L[0], str) and L[0] in labels['author_regiolect'].values():
+    if isinstance(L[0], str):
         return L
     
     elif key == "author_age":
