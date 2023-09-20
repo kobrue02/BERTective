@@ -8,8 +8,8 @@ import pandas as pd
 
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, LSTM, Conv1D, MaxPooling1D, Input, TimeDistributed, Bidirectional
-from keras.optimizers import SGD, Adadelta, RMSprop, Adam
-from keras.layers.convolutional import Conv2D, MaxPooling2D
+from keras.optimizers import SGD, Adadelta, Adam
+from keras.optimizers.legacy import RMSprop
 from keras.losses import SparseCategoricalCrossentropy
 
 def multi_class_prediction_model(n_inputs, n_outputs):
