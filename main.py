@@ -197,82 +197,67 @@ def __build_corpus(data: DataCorpus, PATH: str) -> DataCorpus:
     data = __gutenberg_to_datacorpus(PATH, data)
     return data
 
-def __to_num(L: list) -> list[float]:
+def __to_num(L: list, key: str) -> list[float]:
     """ turns string labels into float """
-    a = {
-        "DE-MIDDLE-EAST": 0.0,
-        "DE-MIDDLE-WEST": 1.0,
-        "DE-NORTH-EAST": 2.0,
-        "DE-NORTH-WEST": 3.0,
-        "DE-SOUTH-EAST": 4.0,
-        "DE-SOUTH-WEST": 5.0
-        }
-        
-    b = {
-        "finished_highschool": 0.0,
-        "has_phd": 1.0,
-        "has_apprentice": 2.0,
-        "has_master": 3.0
-        }
-
-    c = {
-        "female": 0.0,
-        "male": 1.0,
-        "f": 0.0,
-        "m": 1.0
-        }
-        
-    if L[0] in list(a.keys()):
-        return [a[item] for item in L]
-    elif L[0] in list(b.keys()):
-        return [b[item] for item in L]
-    elif L[0] in list(c.keys()): 
-        return [c[item] for item in L]
-    else:
+    labels = {
+                'author_regiolect': {
+                        "DE-MIDDLE-EAST": 0.0,
+                        "DE-MIDDLE-WEST": 1.0,
+                        "DE-NORTH-EAST": 2.0,
+                        "DE-NORTH-WEST": 3.0,
+                        "DE-SOUTH-EAST": 4.0,
+                        "DE-SOUTH-WEST": 5.0
+                        },
+                'author_education': {
+                        "finished_highschool": 0.0,
+                        "has_phd": 1.0,
+                        "has_apprentice": 2.0,
+                        "has_master": 3.0
+                        },
+                'author_gender': {
+                    "female": 0.0,
+                    "male": 1.0,
+                    "f": 0.0,
+                    "m": 1.0
+                    }
+    }
+    if key == "author_age":
         return L
+    else:
+        return [labels.get(key)[i] for i in L]
 
-def __num_to_str(L: list[float]) -> list[str]:
+def __num_to_str(L: list[float], key: str) -> list[str]:
     """ convert the numerical labels back to their true names """
-    if isinstance(L[0], str):
-        genders = {"m": "male",
-                "male": "male",
-                "f": "female",
-                "female": "female"}
-        if L[0] in list(genders.keys()):
-            return [genders[k] for k in L]
-        else:
-            return L
-    else:
-        L = [float(i) for i in L]
-
-    if not all(t in [0.0, 1.0, 2.0, 3.0, 4.0, 5.0] for t in L):
-        return L
-
-    if len(set(L)) == 6:
-        labels = {
-            0.0: "DE-MIDDLE-EAST",
-            1.0: "DE-MIDDLE-WEST",
-            2.0: "DE-NORTH-EAST",
-            3.0: "DE-NORTH-WEST",
-            4.0: "DE-SOUTH-EAST",
-            5.0: "DE-SOUTH-WEST"
-        }
-
-    elif 1 <= len(set(L)) <= 2 and all(t in [0.0, 1.0] for t in L):
-        labels = {
-            0.0: "female",
-            1.0: "male"
-        }
     
-    elif 2 <= len(set(L)) <= 4:
-        labels = {
-            0.0: "finished_highschool",
-            1.0: "has_phd",
-            2.0: "has_apprentice",
-            3.0: "has_master"
-        }
-
-    return [labels[i] for i in L]
+    labels = {
+                'author_regiolect': {
+                    0.0: 'DE-MIDDLE-EAST',
+                    1.0: 'DE-MIDDLE-WEST',
+                    2.0: 'DE-NORTH-EAST',
+                    3.0: 'DE-NORTH-WEST',
+                    4.0: 'DE-SOUTH-EAST',
+                    5.0: 'DE-SOUTH-WEST'
+                },
+                'author_education': {
+                    0.0: 'finished_highschool',
+                    1.0: 'has_phd',
+                    2.0: 'has_apprentice',
+                    3.0: 'has_master'
+                },
+                'author_gender': {
+                    0.0: 'female',
+                    1.0: 'male',
+                    0.0: 'f',
+                    1.0: 'm'
+                }
+            }
+    if isinstance(L[0], str) and L[0] in labels['author_regiolect'].values():
+        return L
+    
+    elif key == "author_age":
+        return L
+    else:
+        return [labels.get(key)[i] for i in L]
 
 def __build_zdl_vectors(data: DataCorpus) -> None:
     """
@@ -487,8 +472,8 @@ def __evaluate(model: Sequential, X_test: list[float], y_test: list[str]) -> str
     # so that we can generate a classification report
     y_pred = np.round(y_pred)
     y_pred = np.argmax(y_pred, axis=1)
-    y_test = __num_to_str([y for y in y_test])
-    y_pred = __num_to_str([y for y in y_pred])
+    y_test = __num_to_str([y for y in y_test], feature[F])
+    y_pred = __num_to_str([y for y in y_pred], feature[F])
     report = classification_report(y_test, y_pred)
     return report
 
@@ -650,8 +635,8 @@ if __name__ == "__main__":
                 X, y, test_size=0.2, random_state=42) #, stratify=y)
     
     # convert labels to tensor stack
-    y_train = tf.stack(__to_num(y_train))
-    y_test = tf.stack(__to_num(y_test_))
+    y_train = tf.stack(__to_num(y_train, feature[F]))
+    y_test = tf.stack(__to_num(y_test_, feature[F]))
 
     def RNN(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
         model = rnn_model(n_inputs, n_outputs)
