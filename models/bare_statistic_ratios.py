@@ -11,7 +11,7 @@ NON_CAPITALIZED = 'abcdefghijklmnopqrstuvwxyzäöüáéíóúàèìòùâêîô�
 
 CAPITALIZED = 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛẞ'
 
-with open("models/wikipedia_emoticons.txt") as f:
+with open("models/wikipedia_emoticons.txt", encoding='utf-8') as f:
     EMOTICONS = f.read().split("\n")
     """
     This file is a manually edited version of the lists at https://en.wikipedia.org/wiki/List_of_emoticons.
