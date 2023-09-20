@@ -16,3 +16,4 @@ morfessor
 trafilatura
 pyarrow
 fastparquet
+emoji
