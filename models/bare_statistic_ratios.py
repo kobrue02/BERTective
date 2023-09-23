@@ -38,6 +38,22 @@ class Statistext:
         self.capped_to_notcapped_ratio = self.__calculate_capped_to_notcapped_ratio()
         self.emoji_count = self.__calculate_emoji_count()
         self.emoticon_count = self.__calculate_emoticon_count()
+        self.all_stats = {
+            "characters_per_word": self.characters_per_word,
+            "words_per_sentence": self.words_per_sentence,
+            "characters_per_noun": self.characters_per_noun,
+            "characters_per_verb": self.characters_per_verb,
+            "characters_per_adjective": self.characters_per_adjective,
+            "characters_per_adverb": self.characters_per_adverb,
+            "nouns_per_sentence": self.nouns_per_sentence,
+            "verbs_per_sentence": self.verbs_per_sentence,
+            "adjectives_per_sentence": self.adjectives_per_sentence,
+            "adverbs_per_sentence": self.adverbs_per_sentence,
+            "vowel_to_consonant_ratio": self.vowel_to_consonant_ratio,
+            "capped_to_notcapped_ratio": self.capped_to_notcapped_ratio,
+            "emoji_count": self.emoji_count,
+            "emoticon_count": self.emoticon_count,
+        }
 
 
     def __calculate_characters_per_word(self) -> float:
