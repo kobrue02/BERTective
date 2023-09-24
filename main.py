@@ -24,11 +24,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 
 import argparse
+import h5py
 import json
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
+import pickle
 import seaborn as sns
 
 from tensorflow.python.ops.numpy_ops import np_config
@@ -595,7 +597,14 @@ def __concat_all_corpus_features(data: DataCorpus) -> dict[int, np.ndarray]:
         stat_vector = np.array(list(statistics[str(ID)].values()))
         combined_vector = __concat_vectors(zdl_vector, ortho_vector, wikt_vector, stat_vector, maxVal)
         features[ID] = combined_vector
-    
+    #print("Storing complete features in npy files...")
+    #os.makedirs("vectors/mapped_features", exist_ok=True)
+    #try:
+    #    h5f = h5py.File(f'vectors/mapped_features/data.h5', 'w')
+    #    for id_, embedding in tqdm(features.items()):
+    #        h5f.create_dataset(str(id_), data=embedding)
+    #    h5f.close()
+    #except: pass
     return features, maxVal
 
 def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
@@ -628,7 +637,6 @@ def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
         vectors = wiktionary_matrix
 
     elif feature.lower() == "all":
-        print("FART")
         X, maxVal = __concat_all_corpus_features(data)
         source = "all"
         vectors = None
@@ -736,8 +744,10 @@ if __name__ == "__main__":
     X, y = shuffle(ids_, y, random_state=3)
     
     # print label distribution
+    print("Label distribution:")
     for item in list(set(y)):
         print(f"{item}: {list(y).count(item)}")
+    print("Note that f and female as well as and m and male will be merged into one label.")
 
     ids_train, ids_test, y_train, y_test_ = train_test_split(
                 X, y, test_size=0.2, random_state=42) #, stratify=y)
