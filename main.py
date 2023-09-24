@@ -1,3 +1,4 @@
+import tensorflow as tf
 from auxiliary import ABOUT
 from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
@@ -28,7 +29,6 @@ import numpy as np
 import os
 import pandas as pd
 import seaborn as sns
-import tensorflow as tf
 
 from tensorflow.python.ops.numpy_ops import np_config
 np_config.enable_numpy_behavior()
