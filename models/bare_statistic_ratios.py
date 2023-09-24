@@ -1,4 +1,5 @@
 import spacy
+import numpy
 import emoji
 
 nlp = spacy.load("de_core_news_sm")
@@ -19,13 +20,18 @@ with open("models/wikipedia_emoticons.txt", encoding='utf-8') as f:
     FIXME: finally make list not contain funny unicode escape seqs anymore
     """
 
+CHAT_ACRONYMS = []
+
+PUNCTUATION = ""
+
+NUMBERS = []
+
 class Statistext:
     def __init__(self, raw_text):
         self.raw_text = raw_text
         self.doc = nlp(raw_text)
         self.characters_per_word = self.__calculate_characters_per_word()
         self.words_per_sentence = self.__calculate_words_per_sentence()
-        # self.morphemes_per_sentence = "This function is currently not working and might be removed later. The chars-per-[POS] functions should achieve similar results. [possible future feature]"
         self.characters_per_noun = self.__calculate_characters_per_noun()
         self.characters_per_verb = self.__calculate_characters_per_verb()
         self.characters_per_adjective = self.__calculate_characters_per_adjective()
@@ -38,23 +44,22 @@ class Statistext:
         self.capped_to_notcapped_ratio = self.__calculate_capped_to_notcapped_ratio()
         self.emoji_count = self.__calculate_emoji_count()
         self.emoticon_count = self.__calculate_emoticon_count()
-        self.all_stats = {
-            "characters_per_word": self.characters_per_word,
-            "words_per_sentence": self.words_per_sentence,
-            "characters_per_noun": self.characters_per_noun,
-            "characters_per_verb": self.characters_per_verb,
-            "characters_per_adjective": self.characters_per_adjective,
-            "characters_per_adverb": self.characters_per_adverb,
-            "nouns_per_sentence": self.nouns_per_sentence,
-            "verbs_per_sentence": self.verbs_per_sentence,
-            "adjectives_per_sentence": self.adjectives_per_sentence,
-            "adverbs_per_sentence": self.adverbs_per_sentence,
-            "vowel_to_consonant_ratio": self.vowel_to_consonant_ratio,
-            "capped_to_notcapped_ratio": self.capped_to_notcapped_ratio,
-            "emoji_count": self.emoji_count,
-            "emoticon_count": self.emoticon_count,
-        }
-
+        self.all_stats = numpy.array([
+            self.characters_per_word,
+            self.words_per_sentence,
+            self.characters_per_noun,
+            self.characters_per_verb,
+            self.characters_per_adjective,
+            self.characters_per_adverb,
+            self.nouns_per_sentence,
+            self.verbs_per_sentence,
+            self.adjectives_per_sentence,
+            self.adverbs_per_sentence,
+            self.vowel_to_consonant_ratio,
+            self.capped_to_notcapped_ratio,
+            self.emoji_count,
+            self.emoticon_count
+        ])
 
     def __calculate_characters_per_word(self) -> float:
         """
@@ -88,29 +93,6 @@ class Statistext:
             return total_word_count/total_sent_count
         else:
             return total_sent_count
-
-    # def __calculate_morph_word_ratio(self) -> float:
-    #     """
-    #     Calculate the average count of morphemes per word
-    #     :return: text’s average morpheme count per word
-    #     """
-    #     """
-    #     FIXME
-    #     currently needs model that can recognize morpheme boundaries, model not found nor trained atm – avg. noun length etc. might be a good alternative
-    #     [this FIXME references same problem as one in class attribute line above]
-    #     """
-    #     try:
-    #         total_word_count = 0
-    #         total_morph_count = 0
-    #         for word in self.doc:
-    #             total_word_count += 1
-    #             total_morph_count += len(model.viterbi_segment(word))
-    #         if total_word_count > 0:
-    #             return total_morph_count/total_word_count
-    #         else:
-    #             return total_word_count
-    #     except NameError:
-    #         return 420.69/420.69
 
     def __calculate_characters_per_noun(self, include_propn=False) -> float:
         """
