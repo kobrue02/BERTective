@@ -127,7 +127,7 @@ class WiktionaryModel:
         # if vectors have been generated before
         vectors_exist = os.path.isfile('vectors/wiktionary.pickle')
         if vectors_exist:
-            print("LOADING WIKTIONARY VECTORS")
+            print("Loading wiktionary vectors...")
             with open('vectors/wiktionary.pickle', 'rb') as f:
                 vectors = pickle.load(f)
                 return vectors
