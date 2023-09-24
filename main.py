@@ -247,12 +247,17 @@ def __num_to_str(L: list[float], key: str) -> list[str]:
                 },
                 'author_gender': {
                     0.0: 'female',
-                    1.0: 'male',
-                    0.0: 'f',
-                    1.0: 'm'
+                    1.0: 'male'
                 }
             }
     if isinstance(L[0], str):
+        for i in range(len(L)):
+            if L[i] == "f":
+                L[i] = "female"
+            elif L[i] == "m":
+                L[i] = "male"
+            else:
+                pass
         return L
     
     elif key == "author_age":
@@ -346,6 +351,11 @@ def __get_zdl_embedding(text: str) -> np.ndarray:
     vector, _ = ZDLVectorModel._vectorize_sample(text, vectionary, verbose=False)
     return vector
 
+def __get_statistical_embedding(text: str) -> np.ndarray:
+    stats = Statistext(text)
+    vals = list(stats.all_stats.values())
+    return np.array(vals)
+    
 def __build_ortho_matrix(data: DataCorpus) -> dict[str, dict[str, np.ndarray]]:
     """
     takes a DataCorpus as input and calculates an orthography/vector embedding for every text.
@@ -381,12 +391,7 @@ def __build_statistical_matrix(data: DataCorpus) -> dict[str, dict[str, float]]:
         text = data[n].text
 
         statistecs = Statistext(text)
-        matrix[ID] = {
-            'CWR': statistecs.char_word_ratio,
-            'CNR': statistecs.cap_nocap_ratio,
-            'VCR': statistecs.vowel_cons_ratio,
-            'WSR': statistecs.word_sent_ratio
-        }
+        matrix[ID] = statistecs.all_stats
     return matrix
 
 def __zero_pad(X: list, maxVal: int) -> list[tf.Tensor]:
@@ -484,14 +489,14 @@ def __plot_items(items: list[DataObject]) -> None:
     sns.barplot(x=list(regiolect_dist.keys()), y=list(regiolect_dist.values()))
     plt.show()
         
-def __evaluate(model: Sequential, X_test: list[float], y_test: list[str]) -> str:
+def __evaluate(model: Sequential, X_test: list[float], y_test: list[str], key: str) -> str:
     y_pred = model.predict(X_test)
     # set the labels and predictions to same type
     # so that we can generate a classification report
     y_pred = np.round(y_pred)
     y_pred = np.argmax(y_pred, axis=1)
-    y_test = __num_to_str([y for y in y_test], feature[F])
-    y_pred = __num_to_str([y for y in y_pred], feature[F])
+    y_test = __num_to_str([y for y in y_test], key)
+    y_pred = __num_to_str([y for y in y_pred], key)
     report = classification_report(y_test, y_pred)
     return report
 
@@ -552,10 +557,11 @@ def __preprocess(sample: str) -> tuple[np.ndarray]:
     zdl_vector = __get_zdl_embedding(sample)
     ortho_vector = np.array(list(__get_ortho_embedding(sample).values()))
     wiktionary_vector = __get_wiktionary_embedding(sample)
-    #statistical_array = ...
+    statistical_array = __get_statistical_embedding(sample)
     print(zdl_vector)
     print(ortho_vector)
     print(wiktionary_vector)
+    print(statistical_array)
 
 
 # PSEUDO CODE
@@ -792,7 +798,7 @@ if __name__ == "__main__":
                                 model_type=args.model
                             )
 
-    report = __evaluate(model, X_test, y_test)
+    report = __evaluate(model, X_test, y_test, key=feature[F])
     print(report)
 
     # binary() 
