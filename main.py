@@ -2,7 +2,7 @@ from auxiliary import ABOUT
 from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
 from data.gutenberg.gutenberg_to_dataobject import align_dicts
-from models.zdl_vector_model import AREAL_DICT, ZDLVectorMatrix
+from models.zdl_vector_model import AREAL_DICT, ZDLVectorMatrix, ZDLVectorModel
 from models.wiktionary_matrix import WiktionaryModel
 from models.keras_cnn_implementation import *
 from models.keras_regresssor_implementation import build_regressor
@@ -67,6 +67,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-f', '--feature', type=str, default="ortho")
     parser.add_argument('-m', '--model', type=str, default='multiclass')
     parser.add_argument('-src', '--source', type=str, nargs='*', default=["ACHGUT", "REDDIT", "GUTENBERG"])
+    parser.add_argument('-pr', '--predict', type=str, default=None)
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -316,6 +317,35 @@ def __build_zdl_vectors(data: DataCorpus) -> None:
     else:
         print('all batches have been vectorized.')
 
+def __get_ortho_embedding(text: str) -> dict[str, list]:
+
+    ortho = OrthoMatrixModel()
+
+    ancient = ortho.find_ortho_match_in_text(text, 'ancient').tolist()
+    revolutionized = ortho.find_ortho_match_in_text(text, 'revolutionized').tolist()
+    modern = ortho.find_ortho_match_in_text(text, 'modern').tolist()
+    error = ortho.find_error_match_in_text(text, 'error').tolist()
+    correct = ortho.find_error_match_in_text(text, 'correct').tolist()
+
+    return {
+            'embedding_ancient': ancient,
+            'embedding_revolutionized': revolutionized,
+            'embedding_modern': modern,
+            'embedding_error': error,
+            'embedding_correct': correct
+        }
+
+def __get_wiktionary_embedding(text: str) -> np.ndarray:
+    wm = WiktionaryModel()
+    _, vector = wm.get_matches(text)
+    return np.array(vector)
+
+def __get_zdl_embedding(text: str) -> np.ndarray:
+    with open('vectors/zdl_vector_dict.json', 'r', encoding='utf-8') as f:
+        vectionary: dict = json.load(f)
+    vector, _ = ZDLVectorModel._vectorize_sample(text, vectionary, verbose=False)
+    return vector
+
 def __build_ortho_matrix(data: DataCorpus) -> dict[str, dict[str, np.ndarray]]:
     """
     takes a DataCorpus as input and calculates an orthography/vector embedding for every text.
@@ -335,19 +365,7 @@ def __build_ortho_matrix(data: DataCorpus) -> dict[str, dict[str, np.ndarray]]:
         ID = data[n].content['id']
         text = data[n].text
 
-        ancient = ortho.find_ortho_match_in_text(text, 'ancient').tolist()
-        revolutionized = ortho.find_ortho_match_in_text(text, 'revolutionized').tolist()
-        modern = ortho.find_ortho_match_in_text(text, 'modern').tolist()
-        error = ortho.find_error_match_in_text(text, 'error').tolist()
-        correct = ortho.find_error_match_in_text(text, 'correct').tolist()
-
-        matrix[ID] = {
-            'embedding_ancient': ancient,
-            'embedding_revolutionized': revolutionized,
-            'embedding_modern': modern,
-            'embedding_error': error,
-            'embedding_correct': correct
-        }
+        matrix[ID] = __get_ortho_embedding(text)
 
     return matrix
 
@@ -530,10 +548,20 @@ def __setup() -> argparse.Namespace:
         assert not any(remaining), "-a (--about) can only be used on its own."
     return args
 
+def __preprocess(sample: str) -> tuple[np.ndarray]:
+    zdl_vector = __get_zdl_embedding(sample)
+    ortho_vector = np.array(list(__get_ortho_embedding(sample).values()))
+    wiktionary_vector = __get_wiktionary_embedding(sample)
+    #statistical_array = ...
+    print(zdl_vector)
+    print(ortho_vector)
+    print(wiktionary_vector)
+
+
 # PSEUDO CODE
 def __predict(model: Sequential, input: str) -> str:
 
-    # data = preprocess(input)
+    # data = __preprocess(input)
     
     # pred = model.predict(data)
 
@@ -565,6 +593,10 @@ if __name__ == "__main__":
         download_wiktionary()
 
     data = DataCorpus()
+
+    if args.predict != None:
+        __preprocess(args.predict)
+        exit()
 
     # if we want to build corpus
     if args.build:
