@@ -32,6 +32,8 @@ class WiktionaryModel:
         :param path: if matrix has been generated previously, it can be loaded
         :param source: DataCorpus object
         """
+        with open('data/wiktionary/wiktionary.json', 'r', encoding='utf-8') as f:
+                self.wiktionary: dict = json.load(f)
 
         # if path is passed, try to load parquet file
         if path:
@@ -39,10 +41,8 @@ class WiktionaryModel:
             self.vectors = self.__vectors_from_df()
         
         # otherwise build matrix from scratch using wiktionary file
-        else:
+        if source:
             self.data: DataCorpus = source
-            with open('data/wiktionary/wiktionary.json', 'r', encoding='utf-8') as f:
-                self.wiktionary: dict = json.load(f)
             self.vectors = {}
             self.__wiktionary_matrix = self.__build_matrix()
             self.df_matrix: pd.DataFrame = self.__to_df()
@@ -60,19 +60,23 @@ class WiktionaryModel:
         matrix = {}
         for obj in tqdm(self.data.corpus):
             ID = obj.content['id']
-
-            tokens = nltk.word_tokenize(obj.text.lower())
-            dist = {k: 0 for k in list(self.wiktionary.keys())}
-
-            for key in list(self.wiktionary.keys()):
-                for word in self.wiktionary[key]:
-                    if word.lower() in tokens:
-                        dist[key] += 1
-
+            text = obj.text.lower()
+            dist, vector = self.get_matches(text)
             matrix[ID] = dist
             self.vectors[ID] = self.__to_vector(dist)
         return matrix
     
+    def get_matches(self, text: str) -> list:
+        tokens = nltk.word_tokenize(text)
+        dist = {k: 0 for k in list(self.wiktionary.keys())}
+
+        for key in list(self.wiktionary.keys()):
+            for word in self.wiktionary[key]:
+                if word.lower() in tokens:
+                    dist[key] += 1
+        vector = self.__to_vector(dist)
+        return dist, vector
+
     def __to_df(self):
         """
         turns a wiktionary matrix into a pandas dataframe.
