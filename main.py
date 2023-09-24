@@ -12,6 +12,7 @@ from models.bare_statistic_ratios import Statistext
 from scraping_tools.wiktionary_api import download_wiktionary
 
 from tqdm import tqdm
+from typing import Union
 from langdetect import detect, DetectorFactory, lang_detect_exception
 from keras.backend import clear_session
 from keras.callbacks import EarlyStopping
@@ -425,7 +426,7 @@ def __maxval(X: list) -> int:
         x = np.array(x)
         if len(x.shape) == 1:
             continue
-        length = x.shape[1]
+        length = x.shape[0]
         if length > maxVal:
             maxVal = length
 
@@ -433,6 +434,7 @@ def __maxval(X: list) -> int:
 
 def __read_parquet(path: str) -> pd.DataFrame:
     # read parquet files back into dataframe
+    print("Loading ZDL vectors from disk...")
     directory_in_str = f"{path}/ZDL"
     directory = os.fsencode(directory_in_str)
     dataframe_list = []   
@@ -500,36 +502,6 @@ def __evaluate(model: Sequential, X_test: list[float], y_test: list[str], key: s
     report = classification_report(y_test, y_pred)
     return report
 
-def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
-
-    if feature.capitalize() == "Ortho":
-        with open('vectors/orthography_matrix.json', 'r') as f:
-            orthoMatrix: dict[str, dict] = json.load(f)
-        X = [np.array(list(orthoMatrix[str(ID)].values())) for ID in ids_]
-        source = "Ortho"
-        vectors = orthoMatrix
-
-    elif feature.capitalize() == "Stat":
-        with open('vectors/statistical_matrix.json', 'r') as f:
-            statistext: dict[str, dict] = json.load(f)
-        X = [np.array(list(statistext[str(ID)].values())) for ID in ids_]
-        source = "Stat"
-        vectors = statistext
-
-    elif feature.upper() == "ZDL":
-        vector_database = __read_parquet(PATH)
-        X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
-        source = "ZDL"
-        vectors = vector_database
-
-    elif feature.capitalize() == "Wikt":
-        wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
-        X = [wiktionary_matrix[id] for id in ids_]
-        source = "Wikt"
-        vectors = wiktionary_matrix
-
-    return X, source, vectors
-
 def __setup() -> argparse.Namespace:
     
     parser = __init_parser()
@@ -553,16 +525,114 @@ def __setup() -> argparse.Namespace:
         assert not any(remaining), "-a (--about) can only be used on its own."
     return args
 
-def __preprocess(sample: str) -> tuple[np.ndarray]:
+def __concat_vectors(
+        zdl_vector: np.ndarray, 
+        ortho_vector: np.ndarray, 
+        wiktionary_vector: np.ndarray, 
+        statistical_array: np.ndarray,
+        maxVal: int = 0) -> np.ndarray:
+    
+    # Find the maximum dimensions for padding
+    if maxVal == 0:
+        max_rows = max(zdl_vector.shape[0], ortho_vector.shape[0], wiktionary_vector.shape[0], statistical_array.shape[0])
+    else:
+        max_rows = max(maxVal, ortho_vector.shape[0], wiktionary_vector.shape[0], statistical_array.shape[0])
+    
+    try:
+        max_cols = max(zdl_vector.shape[1], ortho_vector.shape[1])
+    except IndexError:
+        print(zdl_vector)
+        exit()
+
+    # Create new arrays with the maximum dimensions and fill with zeros
+    combined_array = np.zeros((max_rows, max_cols))
+
+    # Copy the values from the original arrays to the new arrays
+    combined_array[:zdl_vector.shape[0], :zdl_vector.shape[1]] = zdl_vector
+    combined_array[:ortho_vector.shape[0], :ortho_vector.shape[1]] = ortho_vector
+    combined_array[:wiktionary_vector.shape[0], :1] = wiktionary_vector.reshape(-1, 1)  # Reshape and copy
+    combined_array[:statistical_array.shape[0], :1] = statistical_array.reshape(-1, 1)  # Reshape and copy
+    return combined_array
+
+def __preprocess(sample: str, maxVal: int = 0) -> tuple[np.ndarray]:
+
     zdl_vector = __get_zdl_embedding(sample)
     ortho_vector = np.array(list(__get_ortho_embedding(sample).values()))
     wiktionary_vector = __get_wiktionary_embedding(sample)
     statistical_array = __get_statistical_embedding(sample)
-    print(zdl_vector)
-    print(ortho_vector)
-    print(wiktionary_vector)
-    print(statistical_array)
+    print(zdl_vector.shape)
+    print(ortho_vector.shape)
+    print(wiktionary_vector.shape)
+    print(statistical_array.shape)
+    combined_array = __concat_vectors(zdl_vector, ortho_vector, wiktionary_vector, statistical_array, maxVal)
+    
+    print(combined_array.shape)
+    return combined_array
 
+def __concat_all_corpus_features(data: DataCorpus) -> dict[int, np.ndarray]:
+    zdl_vector_database = __read_parquet(PATH)
+    maxVal: int = __maxval([np.array([x for x in embedding]) for embedding in zdl_vector_database.embedding.tolist()])
+    with open(f'vectors/statistical_matrix.json', 'r') as f:
+            statistics: dict[str, dict] = json.load(f)
+    with open('vectors/orthography_matrix.json', 'r') as f:
+            orthoMatrix: dict[str, dict] = json.load(f)
+    wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
+    corpus_size = len(data)
+    features = {}
+    print("Mapping all features into one vector...")
+    for n in tqdm(range(corpus_size)):
+
+        ID = data[n].content['id']
+
+        try:
+            zdl_vector = np.array([x for x in zdl_vector_database.loc[zdl_vector_database['ID'] == ID, 'embedding'].iloc[0]])
+            if zdl_vector.size == 0:
+                zdl_vector = np.zeros((maxVal, 6))
+        except IndexError:
+            zdl_vector = np.zeros((maxVal, 6))
+        ortho_vector = np.array(list(orthoMatrix[str(ID)].values()))
+        wikt_vector = wiktionary_matrix[ID]
+        stat_vector = np.array(list(statistics[str(ID)].values()))
+        combined_vector = __concat_vectors(zdl_vector, ortho_vector, wikt_vector, stat_vector, maxVal)
+        features[ID] = combined_vector
+    
+    return features, maxVal
+
+def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
+
+    if feature.capitalize() == "Ortho":
+        with open('vectors/orthography_matrix.json', 'r') as f:
+            orthoMatrix: dict[str, dict] = json.load(f)
+        X = [np.array(list(orthoMatrix[str(ID)].values())) for ID in ids_]
+        source = "Ortho"
+        vectors = orthoMatrix
+
+    elif feature.capitalize() == "Stat":
+        maxVal = None
+        with open('vectors/statistical_matrix.json', 'r') as f:
+            statistext: dict[str, dict] = json.load(f)
+        X = [np.array(list(statistext[str(ID)].values())) for ID in ids_]
+        source = "Stat"
+        vectors = statistext
+
+    elif feature.lower() == "zdl":
+        vector_database = __read_parquet(PATH)
+        X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
+        source = "ZDL"
+        vectors = vector_database
+
+    elif feature.lower() == "wikt":
+        wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
+        X = [wiktionary_matrix[id] for id in ids_]
+        source = "Wikt"
+        vectors = wiktionary_matrix
+
+    elif feature.lower() == "all":
+        print("FART")
+        X, maxVal = __concat_all_corpus_features(data)
+        source = "all"
+        vectors = None
+    return X, source, vectors, maxVal
 
 # PSEUDO CODE
 def __predict(model: Sequential, input: str) -> str:
@@ -611,7 +681,7 @@ if __name__ == "__main__":
 
     # read existing corpus
     data.read_avro(f'{PATH}/corpus.avro')
-    print(len(data))
+    print(f"The dataset contains {len(data)} items.")
 
     if args.query != None:
         items = __get_query(data, args.query)
@@ -660,7 +730,7 @@ if __name__ == "__main__":
     y = [data[id].content[feature[F]] for id in ids_]
 
     # get training data
-    X, source, vectors = __get_training_data(args.feature)
+    X_data, source, vectors, MAXVAL = __get_training_data(args.feature)
     
     # shuffle the training data
     X, y = shuffle(ids_, y, random_state=3)
@@ -725,14 +795,15 @@ if __name__ == "__main__":
 
         return model
 
-    def train_model(X: list, 
+    def train_model(X: Union[list,dict], 
                     vectors, 
                     ids_train: list, 
                     ids_test: list, 
                     y_train: list, 
                     y_test: list, 
                     source: str = "Ortho",
-                    model_type: str = "multiclass") -> tuple[Sequential, list[float], list[str]]:
+                    model_type: str = "multiclass",
+                    max_val: int = None) -> tuple[Sequential, list[float], list[str]]:
         
         model_select = {
             "rnn": RNN,
@@ -785,17 +856,28 @@ if __name__ == "__main__":
             n_inputs, n_outputs = (4, ), y_train.shape[0]
             model = multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
 
+        elif source == "all":
+            Xtrain = [X.get(ID) for ID in ids_train]
+            Xtest = [X.get(ID) for ID in ids_test]
+            X_train: list[tf.Tensor] = tf.stack(Xtrain)
+            X_test: list[tf.Tensor] = tf.stack(Xtest)
+
+
+            n_inputs, n_outputs = (max_val, 96), y_train.shape[0]
+            model = model_(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+
         return model, X_test, y_test_
      
     model, X_test, y_test = train_model(
-                                X=X, 
+                                X=X_data, 
                                 vectors=vectors, 
                                 ids_train=ids_train, 
                                 ids_test=ids_test, 
                                 y_train=y_train, 
                                 y_test=y_test,
                                 source=source,
-                                model_type=args.model
+                                model_type=args.model,
+                                max_val=MAXVAL
                             )
 
     report = __evaluate(model, X_test, y_test, key=feature[F])
