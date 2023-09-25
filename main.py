@@ -1,5 +1,5 @@
 import tensorflow as tf
-from auxiliary import ABOUT
+from auxiliary import ABOUT, MALE_CHAR, FEMALE_CHAR
 from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
 from data.gutenberg.gutenberg_to_dataobject import align_dicts
@@ -558,6 +558,7 @@ def __concat_vectors(
 
 def __preprocess(sample: str, maxVal: int = 0) -> tuple[np.ndarray]:
 
+    print('Analysing the text...')
     zdl_vector = __get_zdl_embedding(sample)
     ortho_vector = np.array(list(__get_ortho_embedding(sample).values()))
     wiktionary_vector = __get_wiktionary_embedding(sample)
@@ -686,7 +687,13 @@ if __name__ == "__main__":
 
     if args.predict != None:
         pred = __predict(args.predict)
-        print(f"""The author is {pred['author_gender']['label']}. Confidence: {pred['author_gender']['confidence']}.""")
+        gender = pred['author_gender']['label']
+        conf = pred['author_gender']['confidence']
+        if gender == "male":
+            print(MALE_CHAR)
+        else:
+            print(FEMALE_CHAR)
+        print(f"""The author is {gender}. Confidence: {conf}.""")
         exit()
 
     # if we want to build corpus
