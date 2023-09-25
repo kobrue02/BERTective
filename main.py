@@ -16,6 +16,7 @@ from typing import Union
 from langdetect import detect, DetectorFactory, lang_detect_exception
 from keras.backend import clear_session
 from keras.callbacks import EarlyStopping
+from keras.models import load_model
 import matplotlib.pyplot as plt
 from typing import Any
 
@@ -356,8 +357,7 @@ def __get_zdl_embedding(text: str) -> np.ndarray:
 
 def __get_statistical_embedding(text: str) -> np.ndarray:
     stats = Statistext(text)
-    vals = list(stats.all_stats.values())
-    return np.array(vals)
+    return stats.all_stats
     
 def __build_ortho_matrix(data: DataCorpus) -> dict[str, dict[str, np.ndarray]]:
     """
@@ -562,14 +562,12 @@ def __preprocess(sample: str, maxVal: int = 0) -> tuple[np.ndarray]:
     ortho_vector = np.array(list(__get_ortho_embedding(sample).values()))
     wiktionary_vector = __get_wiktionary_embedding(sample)
     statistical_array = __get_statistical_embedding(sample)
-    print(zdl_vector.shape)
-    print(ortho_vector.shape)
-    print(wiktionary_vector.shape)
-    print(statistical_array.shape)
+
     combined_array = __concat_vectors(zdl_vector, ortho_vector, wiktionary_vector, statistical_array, maxVal)
     
-    print(combined_array.shape)
-    return combined_array
+    print(f"The text input has been embedded into a vector of the shape {combined_array.shape}.")
+    for_inference = tf.stack([combined_array])
+    return for_inference
 
 def __concat_all_corpus_features(data: DataCorpus) -> dict[int, np.ndarray]:
     zdl_vector_database = __read_parquet(PATH)
@@ -643,18 +641,26 @@ def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
     return X, source, vectors, maxVal
 
 # PSEUDO CODE
-def __predict(model: Sequential, input: str) -> str:
+def __predict(input: str) -> str:
 
-    # data = __preprocess(input)
-    
-    # pred = model.predict(data)
+    data = __preprocess(input, 1931)
+    features = ['author_gender']
+    profile = {}
+    for feature in features:
+        try:
+            reconstructed_model = load_model(f'models/trained_models/fully_mapped_features_{feature}.model')
+        except FileNotFoundError:
+            raise FileNotFoundError('You need to train a model first.')
+        pred = reconstructed_model.predict(data)
 
-    # output_label = ""
-    # y_pred = np.round(y_pred)
-    # output_label = np.argmax(y_pred, axis=1)
-    # output_label = __num_to_str(output_label, feature)
+        y_pred = np.round(pred)
+        confidence = max(pred[0])
+        output_label = np.argmax(y_pred, axis=1)
+        output_label = __num_to_str(output_label, feature)
 
-    pass
+        profile[feature] = {'label': output_label[0], 'confidence': confidence}
+    return profile
+
 
 if __name__ == "__main__":
 
@@ -679,7 +685,8 @@ if __name__ == "__main__":
     data = DataCorpus()
 
     if args.predict != None:
-        __preprocess(args.predict)
+        pred = __predict(args.predict)
+        print(f"""The author is {pred['author_gender']['label']}. Confidence: {pred['author_gender']['confidence']}.""")
         exit()
 
     # if we want to build corpus
@@ -875,6 +882,8 @@ if __name__ == "__main__":
 
             n_inputs, n_outputs = (max_val, 96), y_train.shape[0]
             model = model_(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+            os.makedirs('models/trained_models', exist_ok=True)
+            model.save(f'models/trained_models/fully_mapped_features_{feature[F]}.model')
 
         return model, X_test, y_test_
      
