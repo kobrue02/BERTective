@@ -1,5 +1,5 @@
 import tensorflow as tf
-from auxiliary import ABOUT, MALE_CHAR, FEMALE_CHAR
+from auxiliary import ABOUT, MALE_CHARS, FEMALE_CHARS
 from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
 from data.gutenberg.gutenberg_to_dataobject import align_dicts
@@ -17,7 +17,6 @@ from langdetect import detect, DetectorFactory, lang_detect_exception
 from keras.backend import clear_session
 from keras.callbacks import EarlyStopping
 from keras.models import load_model
-import matplotlib.pyplot as plt
 from typing import Any
 
 from sklearn.utils import shuffle
@@ -32,6 +31,7 @@ import numpy as np
 import os
 import pandas as pd
 import pickle
+import random
 import seaborn as sns
 
 from tensorflow.python.ops.numpy_ops import np_config
@@ -494,6 +494,7 @@ def __plot_items(items: list[DataObject]) -> None:
     plt.show()
         
 def __evaluate(model: Sequential, X_test: list[float], y_test: list[str], key: str) -> str:
+    print("made it to evaluation")
     y_pred = model.predict(X_test)
     # set the labels and predictions to same type
     # so that we can generate a classification report
@@ -641,17 +642,21 @@ def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
         vectors = None
     return X, source, vectors, maxVal
 
-# PSEUDO CODE
-def __predict(input: str) -> str:
-
+def __predict(input: str, model_features: str = 'all') -> dict[str, dict[str, float]]:
+    """
+    Inference using all pretrained models.
+    Loads models from disk and uses them to predict all author profile features.
+    Returns dict with results.
+    """
     data = __preprocess(input, 1931)
-    features = ['author_gender']
+    features = ['author_gender', 'author_age', 'author_education', 'author_regiolect']
     profile = {}
     for feature in features:
         try:
             reconstructed_model = load_model(f'models/trained_models/fully_mapped_features_{feature}.model')
-        except FileNotFoundError:
-            raise FileNotFoundError('You need to train a model first.')
+        except (FileNotFoundError, OSError):
+            print(f'Did not find a model that predicts {feature}.')
+            continue
         pred = reconstructed_model.predict(data)
 
         y_pred = np.round(pred)
@@ -687,13 +692,38 @@ if __name__ == "__main__":
 
     if args.predict != None:
         pred = __predict(args.predict)
-        gender = pred['author_gender']['label']
-        conf = pred['author_gender']['confidence']
-        if gender == "male":
-            print(MALE_CHAR)
-        else:
-            print(FEMALE_CHAR)
-        print(f"""The author is {gender}. Confidence: {conf}.""")
+
+        gender_predicted = 'author_gender' in list(pred.keys())
+        edu_predicted = 'author_education' in list(pred.keys())
+        regio_predicted = 'author_regiolect' in list(pred.keys())
+        age_predicted = 'author_age' in list(pred.keys())
+
+        if gender_predicted:
+            gender = pred['author_gender']['label']
+            gender_conf = pred['author_gender']['confidence']
+            if gender == "male":
+                print(random.choice(MALE_CHARS))
+            else:
+                print(random.choice(FEMALE_CHARS))
+            print(f"""The author is {gender}. Confidence: {gender_conf:.1%}.""")
+            pronoun_possessive = "His" if gender=='male' else "Her"
+            pronoun_1p = "He" if gender=="male" else "She"
+
+        if edu_predicted:
+            edu = pred['author_education']['label']
+            edu_conf = pred['author_education']['confidence']
+            print(f"{pronoun_possessive} degree of education is most likely {edu}. Confidence: {edu_conf:.1%}.")
+
+        if regio_predicted:
+            regio = pred['author_regiolect']['label']
+            regio_conf = pred['author_regiolect']['confidence']
+            print(f"{pronoun_1p} probably comes from {regio}. Confidence: {regio_conf:.1%}.")
+
+        if age_predicted:
+            age = pred['author_age']['label']
+            age_conf = pred['author_age']['confidence']
+            print(f"{pronoun_1p} is approximately {age} years old. Confidence: {age_conf:.1%}.")
+
         exit()
 
     # if we want to build corpus
@@ -761,7 +791,8 @@ if __name__ == "__main__":
     print("Label distribution:")
     for item in list(set(y)):
         print(f"{item}: {list(y).count(item)}")
-    print("Note that f and female as well as and m and male will be merged into one label.")
+    if feature[F] == "author_gender":
+        print("Note that f and female as well as and m and male will be merged into one label.")
 
     ids_train, ids_test, y_train, y_test_ = train_test_split(
                 X, y, test_size=0.2, random_state=42) #, stratify=y)
@@ -885,8 +916,6 @@ if __name__ == "__main__":
             Xtest = [X.get(ID) for ID in ids_test]
             X_train: list[tf.Tensor] = tf.stack(Xtrain)
             X_test: list[tf.Tensor] = tf.stack(Xtest)
-
-
             n_inputs, n_outputs = (max_val, 96), y_train.shape[0]
             model = model_(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
             os.makedirs('models/trained_models', exist_ok=True)
