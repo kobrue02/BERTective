@@ -227,7 +227,9 @@ def __to_num(L: list, key: str) -> list[float]:
                     }
     }
     if key == "author_age":
-        return L
+        def __age(age: str) -> float:
+            return float(int(int(age)/10)) - 1.0
+        return [__age(str(i)) for i in L]
     else:
         return [labels.get(key)[i] for i in L]
 
@@ -252,6 +254,16 @@ def __num_to_str(L: list[float], key: str) -> list[str]:
                 'author_gender': {
                     0.0: 'female',
                     1.0: 'male'
+                },
+                'author_age': {
+                    0.0: '10-20',
+                    1.0: '20-30',
+                    2.0: '30-40',
+                    3.0: '40-50',
+                    4.0: '50-60',
+                    5.0: '60-70',
+                    6.0: '70-80',
+                    7.0: '80-90'
                 }
             }
     if isinstance(L[0], str):
@@ -264,8 +276,12 @@ def __num_to_str(L: list[float], key: str) -> list[str]:
                 pass
         return L
     
-    elif key == "author_age":
-        return L
+    elif isinstance(L[0], int) and key == "author_age":
+        def __age(age: int) -> str:
+            a = str(age)[0]
+            b = int(a)*10
+            return f"{b}-{b+10}"
+        return [__age(i) for i in L]
     else:
         return [labels.get(key)[i] for i in L]
 
@@ -494,7 +510,6 @@ def __plot_items(items: list[DataObject]) -> None:
     plt.show()
         
 def __evaluate(model: Sequential, X_test: list[float], y_test: list[str], key: str) -> str:
-    print("made it to evaluation")
     y_pred = model.predict(X_test)
     # set the labels and predictions to same type
     # so that we can generate a classification report
