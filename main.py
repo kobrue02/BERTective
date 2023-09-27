@@ -72,6 +72,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-m', '--model', type=str, default='multiclass')
     parser.add_argument('-src', '--source', type=str, nargs='*', default=["ACHGUT", "REDDIT", "GUTENBERG"])
     parser.add_argument('-pr', '--predict', type=str, default=None)
+    parser.add_argument('-n', '--number', type=int, default=4000)
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -584,9 +585,9 @@ def __preprocess(sample: str, maxVal: int = 0) -> tuple[np.ndarray]:
     
     print(f"The text input has been embedded into a vector of the shape {combined_array.shape}.")
     for_inference = tf.stack([combined_array])
-    return for_inference
+    return for_inference, __zero_pad([zdl_vector], 1931)
 
-def __concat_all_corpus_features(data: DataCorpus) -> dict[int, np.ndarray]:
+def __concat_all_corpus_features(data: DataCorpus, ids: list[int]) -> dict[int, np.ndarray]:
     zdl_vector_database = __read_parquet(PATH)
     maxVal: int = __maxval([np.array([x for x in embedding]) for embedding in zdl_vector_database.embedding.tolist()])
     with open(f'vectors/statistical_matrix.json', 'r') as f:
@@ -594,10 +595,9 @@ def __concat_all_corpus_features(data: DataCorpus) -> dict[int, np.ndarray]:
     with open('vectors/orthography_matrix.json', 'r') as f:
             orthoMatrix: dict[str, dict] = json.load(f)
     wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
-    corpus_size = len(data)
     features = {}
     print("Mapping all features into one vector...")
-    for n in tqdm(range(corpus_size)):
+    for n in tqdm(ids):
 
         ID = data[n].content['id']
 
@@ -623,7 +623,7 @@ def __concat_all_corpus_features(data: DataCorpus) -> dict[int, np.ndarray]:
     return features, maxVal
 
 def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
-
+    maxVal = 1931
     if feature.capitalize() == "Ortho":
         with open('vectors/orthography_matrix.json', 'r') as f:
             orthoMatrix: dict[str, dict] = json.load(f)
@@ -632,7 +632,6 @@ def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
         vectors = orthoMatrix
 
     elif feature.capitalize() == "Stat":
-        maxVal = None
         with open('vectors/statistical_matrix.json', 'r') as f:
             statistext: dict[str, dict] = json.load(f)
         X = [np.array(list(statistext[str(ID)].values())) for ID in ids_]
@@ -652,7 +651,7 @@ def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
         vectors = wiktionary_matrix
 
     elif feature.lower() == "all":
-        X, maxVal = __concat_all_corpus_features(data)
+        X, maxVal = __concat_all_corpus_features(data, ids_)
         source = "all"
         vectors = None
     return X, source, vectors, maxVal
@@ -663,17 +662,21 @@ def __predict(input: str, model_features: str = 'all') -> dict[str, dict[str, fl
     Loads models from disk and uses them to predict all author profile features.
     Returns dict with results.
     """
-    data = __preprocess(input, 1931)
+    data, zdl_vector = __preprocess(input, 1931)
     features = ['author_gender', 'author_age', 'author_education', 'author_regiolect']
     profile = {}
     for feature in features:
         try:
-            reconstructed_model = load_model(f'models/trained_models/fully_mapped_features_{feature}.model')
+            if feature == 'author_regiolect':
+                reconstructed_model = load_model(f'models/trained_models/ZDL_features_{feature}.model')
+                pred = reconstructed_model.predict(tf.stack(zdl_vector))
+            else:
+                reconstructed_model = load_model(f'models/trained_models/fully_mapped_features_{feature}.model')
+                pred = reconstructed_model.predict(data)
         except (FileNotFoundError, OSError):
             print(f'Did not find a model that predicts {feature}.')
             continue
-        pred = reconstructed_model.predict(data)
-
+        
         y_pred = np.round(pred)
         confidence = max(pred[0])
         output_label = np.argmax(y_pred, axis=1)
@@ -682,6 +685,142 @@ def __predict(input: str, model_features: str = 'all') -> dict[str, dict[str, fl
         profile[feature] = {'label': output_label[0], 'confidence': confidence}
     return profile
 
+def __print_profile():
+
+    pred = __predict(args.predict)
+
+    gender_predicted = 'author_gender' in list(pred.keys())
+    edu_predicted = 'author_education' in list(pred.keys())
+    regio_predicted = 'author_regiolect' in list(pred.keys())
+    age_predicted = 'author_age' in list(pred.keys())
+
+    if gender_predicted:
+        gender = pred['author_gender']['label']
+        gender_conf = pred['author_gender']['confidence']
+        adj = '' if gender_conf > 90 else 'probably '
+        if gender == "male":
+            print(random.choice(MALE_CHARS))
+        else:
+            print(random.choice(FEMALE_CHARS))
+        print(f"""The author is {adj}{gender}. Confidence: {gender_conf:.1%}.""")
+        pronoun_possessive = "His" if gender=='male' else "Her"
+        pronoun_1p = "He" if gender=="male" else "She"
+
+    if edu_predicted:
+        edu = pred['author_education']['label']
+        edu_conf = pred['author_education']['confidence']
+        adj = '' if gender_conf > 90 else 'most likely '
+        print(f"{pronoun_possessive} degree of education is {adj}{edu}. Confidence: {edu_conf:.1%}.")
+
+    if regio_predicted:
+        regio = pred['author_regiolect']['label']
+        regio_conf = pred['author_regiolect']['confidence']
+        adj = '' if gender_conf > 90 else 'probably '
+        print(f"{pronoun_1p} {adj}comes from {regio}. Confidence: {regio_conf:.1%}.")
+
+    if age_predicted:
+        age = pred['author_age']['label']
+        age_conf = pred['author_age']['confidence']
+        print(f"{pronoun_1p} is approximately {age} years old. Confidence: {age_conf:.1%}.")
+
+    exit()
+
+def __get_applicable_ids(feature: dict, F: argparse.Namespace):
+    
+    ids_: list[int] = []
+    for item in data:
+        if item.source in args.source:
+            if item.content[feature[F]] not in ("N/A", "NONE", "", 0, "0", None):
+                ids_.append(item.content['id'])
+        else:
+            continue
+
+    if args.number < len(ids_):
+        ids_ = random.sample(ids_, args.number)
+    return ids_
+
+def __prepare_training() -> tuple[list, str, list, int, list, list, list, list, argparse.Namespace, str]:
+    feature = {args.education: 'author_education',
+               args.age: 'author_age',
+               args.regiolect: 'author_regiolect',
+               args.gender: 'author_gender'}
+    F = args.education or args.age or args.regiolect or args.gender
+    ids_ = __get_applicable_ids(feature, F)
+    
+     # define target labels
+    y = [data[id].content[feature[F]] for id in ids_]
+
+    # get training data
+    X_data, source, vectors, MAXVAL = __get_training_data(args.feature)
+    
+    # shuffle the training data
+    X, y = shuffle(ids_, y, random_state=3)
+    
+    # print label distribution
+    print("Label distribution:")
+    for item in list(set(y)):
+        print(f"{item}: {list(y).count(item)}")
+    if feature[F] == "author_gender":
+        print("Note that f and female as well as and m and male will be merged into one label.")
+
+    ids_train, ids_test, y_train, y_test_ = train_test_split(
+                X, y, test_size=0.2, random_state=42) #, stratify=y)
+    
+    # convert labels to tensor stack
+    y_train = tf.stack(__to_num(y_train, feature[F]))
+    y_test = tf.stack(__to_num(y_test_, feature[F]))
+
+    return X_data, source, vectors, MAXVAL, ids_train, ids_test, y_train, y_test, feature, F
+
+def RNN(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
+    model = rnn_model(n_inputs, n_outputs)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=8, mode='auto')
+    print(model.summary())
+    try:
+        history = model.fit(X_train, y_train, 
+                            epochs=128, 
+                            verbose=True, 
+                            validation_data=(X_test, y_test), 
+                            batch_size=128,
+                            use_multiprocessing=True,
+                            workers=16,
+                            callbacks = [early_stopping])
+    except KeyboardInterrupt:
+        pass
+
+    return model
+
+def multiclass(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
+    model = multi_class_prediction_model(n_inputs, n_outputs)
+    print(model.summary())
+    early_stopping = EarlyStopping(monitor='val_loss', patience=8, mode='auto')
+    try:
+        history = model.fit(X_train, y_train, 
+                            epochs=128, 
+                            verbose=True, 
+                            validation_data=(X_test, y_test), 
+                            batch_size=64,
+                            use_multiprocessing=True,
+                            workers=16,
+                            callbacks = [early_stopping])
+    except KeyboardInterrupt:
+        pass
+
+    return model
+
+def binary(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
+    model = binary_prediction_model(n_inputs)
+    print(model.summary())
+
+    history = model.fit(X_train, y_train, 
+                        epochs=256, 
+                        verbose=True, 
+                        validation_data=(X_test, y_test), 
+                        batch_size=32,
+                        use_multiprocessing=True,
+                        workers=6)
+
+    return model
 
 if __name__ == "__main__":
 
@@ -706,40 +845,7 @@ if __name__ == "__main__":
     data = DataCorpus()
 
     if args.predict != None:
-        pred = __predict(args.predict)
-
-        gender_predicted = 'author_gender' in list(pred.keys())
-        edu_predicted = 'author_education' in list(pred.keys())
-        regio_predicted = 'author_regiolect' in list(pred.keys())
-        age_predicted = 'author_age' in list(pred.keys())
-
-        if gender_predicted:
-            gender = pred['author_gender']['label']
-            gender_conf = pred['author_gender']['confidence']
-            if gender == "male":
-                print(random.choice(MALE_CHARS))
-            else:
-                print(random.choice(FEMALE_CHARS))
-            print(f"""The author is {gender}. Confidence: {gender_conf:.1%}.""")
-            pronoun_possessive = "His" if gender=='male' else "Her"
-            pronoun_1p = "He" if gender=="male" else "She"
-
-        if edu_predicted:
-            edu = pred['author_education']['label']
-            edu_conf = pred['author_education']['confidence']
-            print(f"{pronoun_possessive} degree of education is most likely {edu}. Confidence: {edu_conf:.1%}.")
-
-        if regio_predicted:
-            regio = pred['author_regiolect']['label']
-            regio_conf = pred['author_regiolect']['confidence']
-            print(f"{pronoun_1p} probably comes from {regio}. Confidence: {regio_conf:.1%}.")
-
-        if age_predicted:
-            age = pred['author_age']['label']
-            age_conf = pred['author_age']['confidence']
-            print(f"{pronoun_1p} is approximately {age} years old. Confidence: {age_conf:.1%}.")
-
-        exit()
+        __print_profile()
 
     # if we want to build corpus
     if args.build:
@@ -778,92 +884,8 @@ if __name__ == "__main__":
 
     if not args.train:
         exit()
-
-    feature = {args.education: 'author_education',
-               args.age: 'author_age',
-               args.regiolect: 'author_regiolect',
-               args.gender: 'author_gender'}
-    F = args.education or args.age or args.regiolect or args.gender
-
-    ids_: list[int] = []
-    for item in data:
-        if item.source in args.source:
-            if item.content[feature[F]] not in ("N/A", "NONE", "", 0, "0", None):
-                ids_.append(item.content['id'])
-        else:
-            continue
     
-     # define target labels
-    y = [data[id].content[feature[F]] for id in ids_]
-
-    # get training data
-    X_data, source, vectors, MAXVAL = __get_training_data(args.feature)
-    
-    # shuffle the training data
-    X, y = shuffle(ids_, y, random_state=3)
-    
-    # print label distribution
-    print("Label distribution:")
-    for item in list(set(y)):
-        print(f"{item}: {list(y).count(item)}")
-    if feature[F] == "author_gender":
-        print("Note that f and female as well as and m and male will be merged into one label.")
-
-    ids_train, ids_test, y_train, y_test_ = train_test_split(
-                X, y, test_size=0.2, random_state=42) #, stratify=y)
-    
-    # convert labels to tensor stack
-    y_train = tf.stack(__to_num(y_train, feature[F]))
-    y_test = tf.stack(__to_num(y_test_, feature[F]))
-
-    def RNN(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
-        model = rnn_model(n_inputs, n_outputs)
-        print(model.summary())
-        try:
-            history = model.fit(X_train, y_train, 
-                                epochs=64, 
-                                verbose=True, 
-                                validation_data=(X_test, y_test), 
-                                batch_size=128,
-                                use_multiprocessing=True,
-                                workers=16)
-        except KeyboardInterrupt:
-            pass
-
-        return model
-
-    def multiclass(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
-        model = multi_class_prediction_model(n_inputs, n_outputs)
-        print(model.summary())
-        early_stopping = EarlyStopping(monitor='val_loss', patience=8, mode='auto')
-        try:
-            history = model.fit(X_train, y_train, 
-                                epochs=128, 
-                                verbose=True, 
-                                validation_data=(X_test, y_test), 
-                                batch_size=64,
-                                use_multiprocessing=True,
-                                workers=16,
-                                callbacks = [early_stopping])
-        except KeyboardInterrupt:
-            pass
-
-        return model
-    
-    ### BINARY PREDICTION (e.g. gender)
-    def binary(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor, y_train: list, y_test: list):
-        model = binary_prediction_model(n_inputs)
-        print(model.summary())
-
-        history = model.fit(X_train, y_train, 
-                            epochs=256, 
-                            verbose=True, 
-                            validation_data=(X_test, y_test), 
-                            batch_size=32,
-                            use_multiprocessing=True,
-                            workers=6)
-
-        return model
+    X_data, source, vectors, MAXVAL, ids_train, ids_test, y_train, y_test, feature, F = __prepare_training()
 
     def train_model(X: Union[list,dict], 
                     vectors, 
@@ -886,15 +908,14 @@ if __name__ == "__main__":
             Xtrain = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_train]
             Xtest = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_test]
 
-            # get longest doc from corpus
-            maxVal: int = __maxval(Xtest+Xtrain)
+            # pad all vectors to same size
+            X_train: list[tf.Tensor] = tf.stack(__zero_pad(Xtrain, max_val))
+            X_test: list[tf.Tensor] = tf.stack(__zero_pad(Xtest, max_val))
 
-            # pad all vectors to that size
-            X_train: list[tf.Tensor] = tf.stack(__zero_pad(Xtrain, maxVal))
-            X_test: list[tf.Tensor] = tf.stack(__zero_pad(Xtest, maxVal))
-
-            n_inputs, n_outputs = (1, maxVal, 6), y_train.shape[0]
+            n_inputs, n_outputs = (1, max_val, 6), y_train.shape[0]
             model = model_(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+            os.makedirs('models/trained_models', exist_ok=True)
+            model.save(f'models/trained_models/ZDL_features_{feature[F]}.model')
 
         elif source == "Wikt":
 
