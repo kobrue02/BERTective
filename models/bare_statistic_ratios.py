@@ -1,308 +1,115 @@
-import spacy
-import numpy
-import emoji
+import spacy, numpy, emoji
 
 nlp = spacy.load("de_core_news_sm")
-
 VOWELS = 'aeiouäöüáéíóúàèìòùâêîôûAEIOUÄÖÜÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛ'
-
 CONSONANTS = 'bcdfghjklmnpqrstvwxyzßBCDFGHJKLMNPQRSTVWXYZẞ'
+with open(file="wikipedia_emoticons.txt", mode="r", encoding='utf-8') as f:
+    EMOTICONS = f.read().split("\n")  # FIXME: make list not contain funny unicode escape seqs anymore
 
-NON_CAPITALIZED = 'abcdefghijklmnopqrstuvwxyzäöüáéíóúàèìòùâêîôûß'
-
-CAPITALIZED = 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛẞ'
-
-with open("models/wikipedia_emoticons.txt", encoding='utf-8') as f:
-    EMOTICONS = f.read().split("\n")
-    """
-    This file is a manually edited version of the lists at https://en.wikipedia.org/wiki/List_of_emoticons.
-    TODO: verify copyright stuff
-    FIXME: finally make list not contain funny unicode escape seqs anymore
-    """
-
-CHAT_ACRONYMS = []
-
-PUNCTUATION = ""
-
-NUMBERS = []
+CHAT_ACRONYMS = ["lol", "lmao", "gtg", "gg", "wp", "gl", "hf", "glhf", "gl;hf", "lmfao"]  # TODO: fill uppp (few suffice bc only 4 training)
 
 class Statistext:
     def __init__(self, raw_text):
-        self.raw_text = raw_text
-        self.doc = nlp(raw_text)
-        self.characters_per_word = self.__calculate_characters_per_word()
-        self.words_per_sentence = self.__calculate_words_per_sentence()
-        self.characters_per_noun = self.__calculate_characters_per_noun()
-        self.characters_per_verb = self.__calculate_characters_per_verb()
-        self.characters_per_adjective = self.__calculate_characters_per_adjective()
-        self.characters_per_adverb = self.__calculate_characters_per_adverb()
-        self.nouns_per_sentence = self.__calculate_nouns_per_sentence()
-        self.verbs_per_sentence = self.__calculate_verbs_per_sentence()
-        self.adjectives_per_sentence = self.__calculate_adjectives_per_sentence()
-        self.adverbs_per_sentence = self.__calculate_adverbs_per_sentence()
-        self.vowel_to_consonant_ratio = self.__calculate_vowel_to_consonant_ratio()
-        self.capped_to_notcapped_ratio = self.__calculate_capped_to_notcapped_ratio()
-        self.emoji_count = self.__calculate_emoji_count()
-        self.emoticon_count = self.__calculate_emoticon_count()
+        # basic building blocks
+        self._raw_text = raw_text
+        self._doc = nlp(self._raw_text)
+        self._sentences = [sent for sent in self._doc.sents]
+        self._tokens = [token for token in self._doc]
+        self._types = set([str(token) for token in self._doc])  # currently only used for ttr
+        self._words = [token for token in self._doc if not token.is_digit and not token.is_space and not token.is_punct]
+        self._numerals = [token for token in self._doc if token.is_digit] #or token in NUMERALS]  # FIXME: spaCy bug? Token.like_num does not include real numerals (words for numbers), neither German nor English, even though it should according to official documentation
+        self._nouns = [token for token in self._doc if token.pos_ == "NOUN"]
+        self._verbs = [token for token in self._doc if token.pos_ == "VERB"]
+        self._adjectives = [token for token in self._doc if token.pos_ == "ADJ"]
+        self._adverbs = [token for token in self._doc if token.pos_ == "ADV"]
+        self._determiners = [token for token in self._doc if token.pos_ == "DET"]
+        self._vowels = [char for char in self._raw_text if char in VOWELS]
+        self._consonants = [char for char in self._raw_text if char in CONSONANTS]
+        self._nocap = [word for word in self._words if str(word)[0].islower()]
+        self._cap = [word for word in self._words if str(word)[0].isupper()]
+        self._chat_acronyms = [word for word in self._words if str(word) in CHAT_ACRONYMS]
+        # lexical diversity
+        try:
+            self.ttr = len(self._types)/len(self._tokens)
+        except ZeroDivisionError:
+            self.ttr = 0
+        try:
+            self.mattr = "TODO: def"
+        except ZeroDivisionError:
+            self.mattr = 0  # TODO: check if even necessary here (depending on method content)
+        # average length of 'lexical' words
+        try:
+            self.characters_per_word = sum(len(word) for word in self._words) / len(self._words)
+        except ZeroDivisionError:
+            self.characters_per_word = 0
+        try:
+            self.characters_per_noun = sum(len(noun) for noun in self._nouns) / len(self._nouns)
+        except ZeroDivisionError:
+            self.characters_per_noun = 0
+        try:
+            self.characters_per_verb = sum(len(verb) for verb in self._verbs) / len(self._verbs)
+        except ZeroDivisionError:
+            self.characters_per_verb = 0
+        try:
+            self.characters_per_adjective = sum(len(adj) for adj in self._adjectives) / len(self._adjectives)
+        except ZeroDivisionError:
+            self.characters_per_adjective = 0
+        try:
+            self.characters_per_adverb = sum(len(adv) for adv in self._adverbs) / len(self._adverbs)
+        except ZeroDivisionError:
+            self.characters_per_adverb = 0
+        # average sentence content of 'lexical' words
+        try:
+            self.words_per_sentence = len(self._words) / len(self._sentences)
+            self.nouns_per_sentence = len(self._nouns) / len(self._sentences)
+            self.verbs_per_sentence = len(self._verbs) / len(self._sentences)
+            self.adjectives_per_sentence = len(self._adjectives) / len(self._sentences)
+            self.adverbs_per_sentence = len(self._adverbs) / len(self._sentences)
+        except ZeroDivisionError:
+            self.words_per_sentence = 0
+            self.nouns_per_sentence = 0
+            self.verbs_per_sentence = 0
+            self.adjectives_per_sentence = 0
+            self.adverbs_per_sentence = 0
+        # pos/pos ratios
+        try:
+            self.articles_per_noun = len(self._determiners) / len(self._nouns)
+            self.adjectives_per_noun = len(self._adjectives) / len(self._nouns)
+        except ZeroDivisionError:
+            self.articles_per_noun = 0
+            self.adjectives_per_noun = 0
+        try:
+            self.adverbs_per_verb = len(self._adverbs) / len(self._verbs)
+        except ZeroDivisionError:
+            self.adverbs_per_verb = 0
+        # special register symbol counts
+        self.emoji_count = emoji.emoji_count(self._raw_text)
+        self.emoticon_count = sum(self._raw_text.count(emoticon) for emoticon in EMOTICONS)
+        self.chat_acronym_count = len(self._chat_acronyms)
+        # dings
+        try:
+            self.vowel_to_consonant_ratio = len(self._vowels) / len(self._consonants)
+        except ZeroDivisionError:
+            self.vowel_to_consonant_ratio = 0
+        try:
+            self.capped_to_notcapped_ratio = len(self._cap) / len(self._nocap)
+        except ZeroDivisionError:
+            self.capped_to_notcapped_ratio = 0
+        # bums
+        self.punctuation_variation = "TODO: def"  # braucht liste
+        self.number_representation = "TODO: def"  # braucht liste
+        self.units_representation = "TODO: def"  # braucht liste
+        self.anglicism_style = "TODO: def"  # braucht liste
+        self.num_unit_spacing = "TODO: def"  # braucht liste(n) und re – s. u.
+        self.fillers_share = "TODO: def"  # braucht liste
+        self.colloq_alt_spelling = "TODO: def"  # braucht liste
+        # all working stats
         self.all_stats = numpy.array([
-            self.characters_per_word,
-            self.words_per_sentence,
-            self.characters_per_noun,
-            self.characters_per_verb,
-            self.characters_per_adjective,
-            self.characters_per_adverb,
-            self.nouns_per_sentence,
-            self.verbs_per_sentence,
-            self.adjectives_per_sentence,
-            self.adverbs_per_sentence,
-            self.vowel_to_consonant_ratio,
-            self.capped_to_notcapped_ratio,
-            self.emoji_count,
-            self.emoticon_count
-        ])
-
-    def __calculate_characters_per_word(self) -> float:
-        """
-        Calculate the average count of characters per word
-        :return: text’s average word length
-        """
-        total_words_length = 0
-        word_count = 0
-        for token in self.doc:
-            if not token.is_space and not token.is_punct and not token.is_digit:
-                total_words_length += len(token.text)
-                word_count += 1
-        if word_count > 0:
-            return total_words_length/word_count
-        else:
-            return word_count
-
-    def __calculate_words_per_sentence(self) -> float:
-        """
-        Calculate the average count of words per sentence
-        :return: text’s average word count per sentence
-        """
-        total_sent_count = 0
-        total_word_count = 0
-        for sentence in self.doc.sents:
-            total_sent_count += 1
-            for token in sentence:
-                if not token.is_space and not token.is_punct:
-                    total_word_count += 1
-        if total_sent_count > 0:
-            return total_word_count/total_sent_count
-        else:
-            return total_sent_count
-
-    def __calculate_characters_per_noun(self, include_propn=False) -> float:
-        """
-        :param include_propn: If set to True, count POS tags NOUN and PROPN instead of NOUN only.
-        :return: average length of nouns in the text
-        """
-        pos_tags = ["NOUN"]
-        if include_propn:
-            pos_tags.append("PROPN")
-        total_nouns_length = 0
-        noun_count = 0
-        for token in self.doc:
-            if token.pos_ in pos_tags:
-                total_nouns_length += len(token.text)
-                noun_count += 1
-        if noun_count > 0:
-            return total_nouns_length/noun_count
-        else:
-            return noun_count
-
-    def __calculate_characters_per_verb(self, include_aux=False) -> float:
-        """
-        :param include_aux: If set to True, count POS tags VERB and AUX instead of VERB only.
-        :return: average length of verbs in the text
-        """
-        pos_tags = ["VERB"]
-        if include_aux:
-            pos_tags.append("AUX")
-        total_verbs_length = 0
-        verb_count = 0
-        for token in self.doc:
-            if token.pos_ in pos_tags:
-                total_verbs_length += len(token.text)
-                verb_count += 1
-        if verb_count > 0:
-            return total_verbs_length/verb_count
-        else:
-            return verb_count
-
-    def __calculate_characters_per_adjective(self) -> float:
-        """
-        :return: average length of adjectives in the text
-        """
-        pos_tags = ["ADJ"]
-        total_adjectives_length = 0
-        adjective_count = 0
-        for token in self.doc:
-            if token.pos_ in pos_tags:
-                total_adjectives_length += len(token.text)
-                adjective_count += 1
-        if adjective_count > 0:
-            return total_adjectives_length/adjective_count
-        else:
-            return adjective_count
-
-    def __calculate_characters_per_adverb(self) -> float:
-        """
-        :return: average length of adverbs in the text
-        """
-        pos_tags = ["ADV"]
-        total_adverbs_length = 0
-        adverb_count = 0
-        for token in self.doc:
-            if token.pos_ in pos_tags:
-                total_adverbs_length += len(token.text)
-                adverb_count += 1
-        if adverb_count > 0:
-            return total_adverbs_length/adverb_count
-        else:
-            return adverb_count
-        
-    def __calculate_nouns_per_sentence(self, include_propn=False) -> float:
-        """
-        :param include_propn: If set to True, count POS tags NOUN and PROPN instead of NOUN only.
-        :return: average number of nouns per sentence
-        """
-        pos_tags = ["NOUN"]
-        if include_propn:
-            pos_tags.append("PROPN")
-        total_sent_count = 0
-        total_noun_count = 0
-        for sentence in self.doc.sents:
-            total_sent_count += 1
-            for token in sentence:
-                if token.pos_ in pos_tags:
-                    total_noun_count += 1
-        if total_sent_count > 0:
-            return total_noun_count/total_sent_count
-        else:
-            return total_sent_count
-
-    def __calculate_verbs_per_sentence(self, include_aux=False) -> float:
-        """
-        :param include_aux: If set to True, count POS tags VERB and AUX instead of VERB only.
-        :return: average number of verbs per sentence
-        """
-        pos_tags = ["VERB"]
-        if include_aux:
-            pos_tags.append("AUX")
-        total_sent_count = 0
-        total_verb_count = 0
-        for sentence in self.doc.sents:
-            total_sent_count += 1
-            for token in sentence:
-                if token.pos_ in pos_tags:
-                    total_verb_count += 1
-        if total_sent_count > 0:
-            return total_verb_count/total_sent_count
-        else:
-            return total_sent_count
-        
-    def __calculate_adjectives_per_sentence(self) -> float:
-        """
-        :return: average number of adjectives per sentence
-        """
-        pos_tags = ["ADJ"]
-        total_sent_count = 0
-        total_adjs_count = 0
-        for sentence in self.doc.sents:
-            total_sent_count += 1
-            for token in sentence:
-                if token.pos_ in pos_tags:
-                    total_adjs_count += 1
-        if total_sent_count > 0:
-            return total_adjs_count/total_sent_count
-        else:
-            return total_sent_count
-    
-    def __calculate_adverbs_per_sentence(self) -> float:
-        """
-        :return: average number of adverbs per sentence
-        """
-        pos_tags = ["ADV"]
-        total_sent_count = 0
-        total_advs_count = 0
-        for sentence in self.doc.sents:
-            total_sent_count += 1
-            for token in sentence:
-                if token.pos_ in pos_tags:
-                    total_advs_count += 1
-        if total_sent_count > 0:
-            return total_advs_count/total_sent_count
-        else:
-            return total_sent_count
-
-    def __calculate_vowel_to_consonant_ratio(self) -> float:
-        """
-        Calculate the vowel-consonant ratio
-        :return: text’s vowel-consonant ratio
-        """
-        vowel_count = 0
-        consonant_count = 0
-        for char in self.raw_text:
-            if char in VOWELS:
-                vowel_count += 1
-            elif char in CONSONANTS:
-                consonant_count += 1
-        if consonant_count > 0:
-            return vowel_count/consonant_count
-        else:
-            return consonant_count
-
-    def __calculate_capped_to_notcapped_ratio(self, count_remaining=False) -> float:
-        """
-        Calculate the ratio of capitalized to non-capitalized words
-        :param count_remaining: for debugging, additionally print number of words that flew under the radar
-        :return: text’s word capitalization rate
-        """
-        cap_count = 0
-        nocap_count = 0
-        neither_count = 0
-        for token in self.doc:
-            if not token.is_space and not token.is_punct and not token.is_digit:
-                if str(token)[0] in NON_CAPITALIZED:
-                    nocap_count += 1
-                elif str(token)[0] in CAPITALIZED:
-                    cap_count += 1
-                else:
-                    neither_count += 1
-        if count_remaining:
-            print(f"number of initial letters neither in NON_CAPITALIZED nor in CAPITALIZED: {neither_count}")
-        if nocap_count > 0:
-            return cap_count/nocap_count
-        else:
-            return nocap_count
-
-    def __calculate_emoji_count(self, user_verify=False) -> int:
-        """
-        Count the number of emoji
-        :param user_verify: If set to True, additionally return all found emoji for user to verify.
-        :return: number of emoji in the text
-        """
-        emoji_count = emoji.emoji_count(self.raw_text)
-        emoji_list = emoji.emoji_list(self.raw_text)
-        if user_verify:
-            return emoji_count, emoji_list
-        return emoji_count
-    
-    def __calculate_emoticon_count(self, user_verify=False) -> int:
-        """
-        Count the number of emoticons
-        :param user_verify: If set to True, additionally return all found emoticons for user to verify.
-        :return: number of emoticons in the text
-        """
-        emoticon_count = 0
-        emoticon_list = []
-        for emoticon in EMOTICONS:
-            current_count = self.raw_text.count(emoticon)
-            if current_count:
-                emoticon_list.append(emoticon)
-        if user_verify:
-            return emoticon_count, emoticon_list
-        return emoticon_count
+            #self.ttr, self.mattr,
+            self.characters_per_word, self.characters_per_noun, self.characters_per_verb, self.characters_per_adjective, self.characters_per_adverb,
+            self.words_per_sentence, self.nouns_per_sentence, self.verbs_per_sentence, self.adjectives_per_sentence, self.adverbs_per_sentence,
+            self.articles_per_noun, self.adjectives_per_noun, self.adverbs_per_verb,
+            self.emoji_count, self.emoticon_count, self.chat_acronym_count,
+            self.vowel_to_consonant_ratio, self.capped_to_notcapped_ratio#,
+            #self.punctuation_variation, self.number_representation, self.units_representation, self.anglicism_style, self.num_unit_spacing, self.fillers_share, self.colloq_alt_spelling
+            ])
