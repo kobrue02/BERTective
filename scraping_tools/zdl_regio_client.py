@@ -7,7 +7,7 @@ import random
 import requests
 import string
 import nltk
-from german_stopwords import stopwords_ as stopwords
+from src.german_stopwords import stopwords_ as stopwords
 from tqdm import tqdm
 from pprint import pprint
 

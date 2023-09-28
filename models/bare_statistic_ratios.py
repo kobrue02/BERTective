@@ -84,15 +84,18 @@ class Statistext:
             self.vowel_to_consonant_ratio, self.capped_to_notcapped_ratio, self.number_representation
             ])
     
-    def __mattr(types: list, tokens: list, window_size: int) -> float:
+    def __mattr(self, types: list, tokens: list, window_size: int) -> float:
         doc_size = len(tokens)
         j = 0
         averages = []
-        for i in range(doc_size/window_size):
+        for i in range(int(doc_size/window_size)):
             span = slice(j, j+window_size)
             _types = types[span]
-            _tokens = tokens[span]
+            _tokens = list(tokens)[span]
             _ttr = len(_types)/len(_tokens) if len(_tokens) > 0 else 0.0
             averages.append(_ttr)
             j += window_size + 1
-        return sum(averages)/len(averages)
+        try:
+            return sum(averages)/len(averages)
+        except ZeroDivisionError:
+            return 0

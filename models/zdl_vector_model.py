@@ -13,8 +13,8 @@ import sys
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
-from corpus import DataCorpus, DataObject
-from german_stopwords import stopwords_
+from src.corpus import DataCorpus, DataObject
+from src.german_stopwords import stopwords_
 from scraping_tools.zdl_regio_client import zdl_request, tokenize
 
 import json
