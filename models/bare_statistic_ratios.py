@@ -42,7 +42,7 @@ class Statistext:
         self._chat_acronyms = [word for word in self._words if str(word).lower() in CHAT_ACRONYMS]
         # lexical diversity
         self.ttr = len(self._types)/len(self._tokens) if len(self._tokens) > 0 else 0.0
-        self.mattr = "TODO: def"
+        self.mattr = self.__mattr(self._tokens, self._types, 50)
         # average length of 'lexical' words
         self.characters_per_word = sum(len(word) for word in self._words) / len(self._words) if len(self._words) > 0 else 0.0
         self.characters_per_noun = sum(len(noun) for noun in self._nouns) / len(self._nouns) if len(self._nouns) > 0 else 0.0
@@ -83,3 +83,16 @@ class Statistext:
             self.emoji_count, self.emoticon_count, self.chat_acronym_count,
             self.vowel_to_consonant_ratio, self.capped_to_notcapped_ratio, self.number_representation
             ])
+    
+    def __mattr(types: list, tokens: list, window_size: int) -> float:
+        doc_size = len(tokens)
+        j = 0
+        averages = []
+        for i in range(doc_size/window_size):
+            span = slice(j, j+window_size)
+            _types = types[span]
+            _tokens = tokens[span]
+            _ttr = len(_types)/len(_tokens) if len(_tokens) > 0 else 0.0
+            averages.append(_ttr)
+            j += window_size
+        return sum(averages)/len(averages)
