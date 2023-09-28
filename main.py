@@ -3,8 +3,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 from src.auxiliary import ABOUT, LOGO, MALE_CHARS, FEMALE_CHARS
 from src.exceptions import *
-from corpus import DataCorpus, DataObject
-from crawl_all_datasets import download_data
+from src.corpus import DataCorpus, DataObject
+from src.crawl_all_datasets import download_data
 from data.gutenberg.gutenberg_to_dataobject import align_dicts
 from models.zdl_vector_model import AREAL_DICT, ZDLVectorMatrix, ZDLVectorModel
 from models.wiktionary_matrix import WiktionaryModel
