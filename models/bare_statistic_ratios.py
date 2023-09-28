@@ -11,7 +11,7 @@ CONSONANTS = 'bcdfghjklmnpqrstvwxyzßBCDFGHJKLMNPQRSTVWXYZẞ'
 with open(file="./models/wikipedia_emoticons.txt", mode="r", encoding="utf-8") as f:
     EMOTICONS = f.read().split("\n")  # FIXME: make list not contain funny unicode escape seqs anymore
 # incomplete but probably sufficient-for-training list of chat-like acronyms somewhat likely for german texts
-CHAT_ACRONYMS = ["lol", "lul", "lel", "lül", "lmao", "lmfao", "rofl", "smh", "ofc", "nvm", "yolo", "afk", "afaik", "afaic", "tbh", "ngl", "imo", "imho", "idk", "idc", "asap", "bae", "btw", "dafuq", "mmd", "irl", "nsfw", "tldr", "tl,dr", "tl;dr", "tl:dr", "omg", "omfg"]
+CHAT_ACRONYMS = ["lol", "lul", "lel", "lül", "lmao", "lmfao", "rofl", "smh", "ofc", "nvm", "yolo", "afk", "afaik", "afaic", "tbh", "ngl", "imo", "imho", "idk", "idc", "asap", "bae", "btw", "dafuq", "mmd", "irl", "nsfw", "tldr", "tl,dr", "tl;dr", "tl:dr", "omg", "omfg", "iirc", "asf", "stg"]
 
 # numerals we want to match exactly since with 'in string' they could mess up recall (e.g. Nullnummer, herein, dreist, Achtung …)
 NUMERALS_EM = ["null", "ein", "eins", "eines", "eine", "einer", "einem", "einen", "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun", "zehn", "elf", "zwölf"]
@@ -19,13 +19,18 @@ NUMERALS_EM = ["null", "ein", "eins", "eines", "eine", "einer", "einem", "einen"
 NUMERALS_IN = ["dreizehn", "vierzehn", "fünfzehn", "sechzehn", "siebzehn", "achtzehn", "neunzehn", "zwanzig", "einundzwanzig", "zweiundzwanzig", "dreiundzwanzig", "vierundzwanzig", "fünfundzwanzig", "sechsundzwanzig", "siebenundzwanzig", "achtundzwanzig", "neunundzwanzig", "dreißig", "einunddreißig", "zweiunddreißig", "dreiunddreißig", "vierunddreißig", "fünfunddreißig", "sechsunddreißig", "siebenunddreißig", "achtunddreißig", "neununddreißig", "vierzig", "einundvierzig", "zweiundvierzig", "dreiundvierzig", "vierundvierzig", "fünfundvierzig", "sechsundvierzig", "siebenundvierzig", "achtundvierzig", "neunundvierzig", "fünfzig", "einundfünfzig", "zweiundfünfzig", "dreiundfünfzig", "vierundfünfzig", "fünfundfünfzig", "sechsundfünfzig", "siebenundfünfzig", "achtundfünfzig", "neunundfünfzig", "sechzig", "einundsechzig", "zweiundsechzig", "dreiundsechzig", "vierundsechzig", "fünfundsechzig", "sechsundsechzig", "siebenundsechzig", "achtundsechzig", "neunundsechzig", "siebzig", "einundsiebzig", "zweiundsiebzig", "dreiundsiebzig", "vierundsiebzig", "fünfundsiebzig", "sechsundsiebzig", "siebenundsiebzig", "achtundsiebzig", "neunundsiebzig", "achtzig", "einundachtzig", "zweiundachtzig", "dreiundachtzig", "vierundachtzig", "fünfundachtzig", "sechsundachtzig", "siebenundachtzig", "achtundachtzig", "neunundachtzig", "neunzig", "einundneunzig", "zweiundneunzig", "dreiundneunzig", "vierundneunzig", "fünfundneunzig", "sechsundneunzig", "siebenundneunzig", "achtundneunzig", "neunundneunzig", "hundert"]
 
 class Statistext:
-    def __init__(self, raw_text):
+    def __init__(self, raw_text, mattr_ws=50):
+        """
+        :param raw_text: string of text for which stats to be calculated
+        :param mattr_ws: size of windows when calculating MATTR, consider setting this to the lenth of the shortest text in your corpus when comparing multiple ones
+        """
         # basic building blocks
         self._raw_text = raw_text
+        self._mattr_ws = mattr_ws  # window size for MATTR
         self._doc = nlp(self._raw_text)
         self._sentences = [sent for sent in self._doc.sents]
         self._tokens = [token for token in self._doc]
-        self._types = set([str(token) for token in self._doc])
+        #self._types = set([str(token) for token in self._doc])
         self._words = [token for token in self._doc if not token.is_digit and not token.is_space and not token.is_punct]
         self._numbers = [token for token in self._doc if token.is_digit]
         self._numerals = [token for token in self._doc if str(token) in NUMERALS_EM or any(num for num in NUMERALS_IN if num in str(token))]
@@ -41,8 +46,8 @@ class Statistext:
         self._emoticons = [token for token in self._raw_text.split() if any(e for e in EMOTICONS if e == token)]
         self._chat_acronyms = [word for word in self._words if str(word).lower() in CHAT_ACRONYMS]
         # lexical diversity
-        self.ttr = len(self._types)/len(self._tokens) if len(self._tokens) > 0 else 0.0
-        self.mattr = self.__mattr(self._tokens, self._types, 50)
+        #self.ttr = len(self._types)/len(self._tokens) if len(self._tokens) > 0 else 0.0
+        self.mattr = self._calculate_mattr()
         # average length of 'lexical' words
         self.characters_per_word = sum(len(word) for word in self._words) / len(self._words) if len(self._words) > 0 else 0.0
         self.characters_per_noun = sum(len(noun) for noun in self._nouns) / len(self._nouns) if len(self._nouns) > 0 else 0.0
@@ -84,18 +89,26 @@ class Statistext:
             self.vowel_to_consonant_ratio, self.capped_to_notcapped_ratio, self.number_representation
             ])
     
-    def __mattr(self, types: list, tokens: list, window_size: int) -> float:
-        doc_size = len(tokens)
-        j = 0
-        averages = []
-        for i in range(int(doc_size/window_size)):
-            span = slice(j, j+window_size)
-            _types = types[span]
-            _tokens = list(tokens)[span]
-            _ttr = len(_types)/len(_tokens) if len(_tokens) > 0 else 0.0
-            averages.append(_ttr)
-            j += window_size + 1
-        try:
-            return sum(averages)/len(averages)
-        except ZeroDivisionError:
-            return 0
+    def _calculate_mattr(self) -> float:
+        doc_size = len(self._tokens)
+        window_size = self._mattr_ws
+        window_start = 0
+        ttr_values = []
+        for i in range(len(doc_size)/window_size):
+            window = slice(window_start, window_start+window_size)
+            window_types = self._types[window]
+            window_tokens = self._tokens[window]
+            window_ttr = len(window_types)/len(window_tokens) if len(window_tokens) > 0 else 0.0
+            ttr_values.append(window_ttr)
+            window_start += window_size
+        return sum(ttr_values)/len(ttr_values) if len(ttr_values) > 0 else 0.0
+        
+        windows = [text[i:i+window_size] for i in range(0, len(text)-window_size+1, step_size)]
+    ttr_values = []
+    for window in windows:
+        tokens = window.split()
+        unique_tokens = set(tokens)
+        ttr = len(unique_tokens) / len(tokens) if len(tokens) > 0 else 0.0
+        ttr_values.append(ttr)
+    
+    return sum(ttr_values) / len(ttr_values)
