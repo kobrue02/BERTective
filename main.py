@@ -1,5 +1,8 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
-from auxiliary import ABOUT, LOGO, MALE_CHARS, FEMALE_CHARS
+from src.auxiliary import ABOUT, LOGO, MALE_CHARS, FEMALE_CHARS
+from src.exceptions import *
 from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
 from data.gutenberg.gutenberg_to_dataobject import align_dicts
@@ -24,14 +27,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 
 import argparse
-import h5py
 import json
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import pandas as pd
-import pickle
 import random
+import re
 import seaborn as sns
 
 from tensorflow.python.ops.numpy_ops import np_config
@@ -556,6 +557,8 @@ def __concat_vectors(
     one 2D array representing all features.
     :param zdl_vector: numpy array containing a ZDL vector, usually of shape (1, 1931, 6)
     :ortho_vector: numpy array representing orthography matrix. (5, 96)
+    :wiktionary_vector: numpy array of shape (27, ) which represents wiktionary vocabulary use
+    :statistical_array: numpy array that contains bare statistical features, shape TBD
     """
 
     # Find the maximum dimensions for padding
@@ -580,8 +583,11 @@ def __concat_vectors(
     combined_array[:statistical_array.shape[0], :1] = statistical_array.reshape(-1, 1)  # Reshape and copy
     return combined_array
 
-def __preprocess(sample: str, maxVal: int = 0) -> tuple[np.ndarray]:
-
+def __preprocess(sample: str, maxVal: int = 0) -> tuple[list[tf.Tensor], list[tf.Tensor]]:
+    """
+    Preproces a text and extract all features using the respective methods.
+    Returns one list of tensors with all mapped features, and one tensor list with only ZDL vectors.
+    """
     print('Analysing the text...')
     zdl_vector = __get_zdl_embedding(sample)
     ortho_vector = np.array(list(__get_ortho_embedding(sample).values()))
@@ -629,30 +635,45 @@ def __concat_all_corpus_features(data: DataCorpus, ids: list[int]) -> dict[int, 
     #except: pass
     return features, maxVal
 
-def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
+def __get_training_data(feature: str, ids_: list[int]) -> tuple[list[np.ndarray], str, Any]:
     maxVal = 1931
     if feature.capitalize() == "Ortho":
-        with open('vectors/orthography_matrix.json', 'r') as f:
+        ortho_path = 'vectors/orthography_matrix.json'
+        if not os.path.exists(ortho_path):
+            raise MissingTrainingData("It seems that the orthography matrix has not been generated yet."
+                                      "Please do so, using -bo")
+        with open(ortho_path, 'r') as f:
             orthoMatrix: dict[str, dict] = json.load(f)
         X = [np.array(list(orthoMatrix[str(ID)].values())) for ID in ids_]
         source = "Ortho"
         vectors = orthoMatrix
 
     elif feature.capitalize() == "Stat":
-        with open('vectors/statistical_matrix.json', 'r') as f:
+        stat_path = 'vectors/statistical_matrix.json'
+        if not os.path.exists(stat_path):
+            raise MissingTrainingData("It seems that the statistical features have not been generated yet."
+                                      "Please do so, using -bs")
+        with open(stat_path, 'r') as f:
             statistext: dict[str, dict] = json.load(f)
         X = [np.array(list(statistext[str(ID)].values())) for ID in ids_]
         source = "Stat"
         vectors = statistext
 
     elif feature.lower() == "zdl":
+        if not os.path.exists(f"{PATH}/ZDL"):
+            raise MissingTrainingData("It seems that the ZDL vectors have not been generated yet."
+                                      "Please do so, using -bz")
         vector_database = __read_parquet(PATH)
         X = [vector_database[vector_database['ID'] == id].embedding.tolist() for id in ids_]
         source = "ZDL"
         vectors = vector_database
 
     elif feature.lower() == "wikt":
-        wiktionary_matrix = WiktionaryModel('data/wiktionary/wiktionary.parquet')
+        wikt_path = 'data/wiktionary/wiktionary.parquet'
+        if not os.path.exists('data/wiktionary/wiktionary.parquet'):
+            raise MissingTrainingData("It seems that the Wiktionary Matrix has not been generated yet."
+                                      "Please do so, using -bw")
+        wiktionary_matrix = WiktionaryModel(wikt_path)
         X = [wiktionary_matrix[id] for id in ids_]
         source = "Wikt"
         vectors = wiktionary_matrix
@@ -663,16 +684,30 @@ def __get_training_data(feature: str) -> tuple[list[np.ndarray], str, Any]:
         vectors = None
     return X, source, vectors, maxVal
 
-def __predict(input: str, model_features: str = 'all') -> dict[str, dict[str, float]]:
+def __get_text_from_arg(input_str: str) -> str:
+    pattern = r"""^(?:[a-z]:)?[\/\\]{0,2}(?:[.\/\\ ](?![.\/\\\n])|[^<>:\"|?*.\/\\ \n])+$"""
+    is_path = re.search(pattern, input_str)
+    if is_path:
+        if not os.path.exists(input_str):
+             raise ParsedPathNotExistError("Your input '{}' looks like a path, but the file doesn't exist.".format(input_str))
+        print("reading file...")
+        with open(input_str, 'r', encoding='utf-8') as f:
+            input_str = f.read()
+    return input_str
+
+def __predict(input_arg: str, model_features: str = 'all') -> dict[str, dict[str, float]]:
     """
     Inference using all pretrained models.
     Loads models from disk and uses them to predict all author profile features.
     Returns dict with results.
     """
-    data, zdl_vector = __preprocess(input, 1931)
+    
+    text = __get_text_from_arg(input_arg)
+    data, zdl_vector = __preprocess(text, 1931)
     features = ['author_gender', 'author_age', 'author_education', 'author_regiolect']
     profile = {}
     for feature in features:
+        print(f'Infering {feature}...')
         try:
             if feature == 'author_regiolect':
                 reconstructed_model = load_model(f'models/trained_models/ZDL_features_{feature}.model')
@@ -692,8 +727,11 @@ def __predict(input: str, model_features: str = 'all') -> dict[str, dict[str, fl
         profile[feature] = {'label': output_label[0], 'confidence': confidence}
     return profile
 
-def __print_profile():
-
+def __print_profile() -> None:
+    """
+    Loads pretrained models to make prediction for input text.
+    This prediction is printed to the console and nothing is returned.
+    """
     pred = __predict(args.predict)
 
     gender_predicted = 'author_gender' in list(pred.keys())
@@ -704,7 +742,7 @@ def __print_profile():
     if gender_predicted:
         gender = pred['author_gender']['label']
         gender_conf = pred['author_gender']['confidence']
-        adj = '' if gender_conf > 90 else 'probably '
+        adj = '' if gender_conf > 0.9 else 'probably '
         if gender == "male":
             print(random.choice(MALE_CHARS))
         else:
@@ -716,13 +754,13 @@ def __print_profile():
     if edu_predicted:
         edu = pred['author_education']['label']
         edu_conf = pred['author_education']['confidence']
-        adj = '' if gender_conf > 90 else 'most likely '
+        adj = '' if edu_conf > 0.9 else 'most likely '
         print(f"{pronoun_possessive} degree of education is {adj}{edu}. Confidence: {edu_conf:.1%}.")
 
     if regio_predicted:
         regio = pred['author_regiolect']['label']
         regio_conf = pred['author_regiolect']['confidence']
-        adj = '' if gender_conf > 90 else 'probably '
+        adj = '' if regio_conf > 0.9 else 'probably '
         print(f"{pronoun_1p} {adj}comes from {regio}. Confidence: {regio_conf:.1%}.")
 
     if age_predicted:
@@ -732,8 +770,10 @@ def __print_profile():
 
     exit()
 
-def __get_applicable_ids(feature: dict, F: argparse.Namespace):
+def __get_applicable_ids(data: DataCorpus, feature: dict, F: argparse.Namespace):
+    """
     
+    """
     ids_: list[int] = []
     for item in data:
         if item.source in args.source:
@@ -746,19 +786,24 @@ def __get_applicable_ids(feature: dict, F: argparse.Namespace):
         ids_ = random.sample(ids_, args.number)
     return ids_
 
-def __prepare_training() -> tuple[list, str, list, int, list, list, list, list, argparse.Namespace, str]:
+def __prepare_training(data: DataCorpus, args: argparse.Namespace) -> tuple[list, str, list, int, list, list, list, list, argparse.Namespace, str]:
+    """
+    Takes a DataCorpus and argparse Namespace as input,
+    and prepares a training session by generating the required data.
+    """
+    
     feature = {args.education: 'author_education',
                args.age: 'author_age',
                args.regiolect: 'author_regiolect',
                args.gender: 'author_gender'}
     F = args.education or args.age or args.regiolect or args.gender
-    ids_ = __get_applicable_ids(feature, F)
+    ids_ = __get_applicable_ids(data, feature, F)
     
      # define target labels
     y = [data[id].content[feature[F]] for id in ids_]
 
     # get training data
-    X_data, source, vectors, MAXVAL = __get_training_data(args.feature)
+    X_data, source, vectors, MAXVAL = __get_training_data(args.feature, ids_)
     
     # shuffle the training data
     X, y = shuffle(ids_, y, random_state=3)
@@ -775,7 +820,7 @@ def __prepare_training() -> tuple[list, str, list, int, list, list, list, list, 
     
     # convert labels to tensor stack
     y_train = tf.stack(__to_num(y_train, feature[F]))
-    y_test = tf.stack(__to_num(y_test_, feature[F]))
+    y_test = __to_num(y_test_, feature[F])
 
     return X_data, source, vectors, MAXVAL, ids_train, ids_test, y_train, y_test, feature, F
 
@@ -834,7 +879,7 @@ def train_model(X: Union[list,dict],
                     ids_train: list, 
                     ids_test: list, 
                     y_train: list, 
-                    y_test: list, 
+                    y_test_: list, 
                     source: str = "Ortho",
                     model_type: str = "multiclass",
                     max_val: int = None) -> tuple[Sequential, list[float], list[str]]:
@@ -845,7 +890,7 @@ def train_model(X: Union[list,dict],
             "binary": binary
         }
         model_ = model_select.get(model_type)
-
+        y_test = tf.stack(y_test_)
         if source == "ZDL":
             Xtrain = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_train]
             Xtest = [vectors[vectors['ID'] == id].embedding.tolist() for id in ids_test]
@@ -913,12 +958,15 @@ if __name__ == "__main__":
     __make_directories(PATH)
 
     if args.about:
+        # help
         print(ABOUT)
 
     if args.download_data:
+        # download all data resources
         download_data(['achse', 'ortho', 'reddit_locales'], "test")
 
     if args.download_wikt:
+        # download wiktionary with scraper
         download_wiktionary()
 
     data = DataCorpus()
@@ -961,25 +1009,21 @@ if __name__ == "__main__":
             json.dump(statistext, f)
         exit()
 
-    if not args.train:
-        exit()
-    
-    X_data, source, vectors, MAXVAL, ids_train, ids_test, y_train, y_test, feature, F = __prepare_training()
-     
-    model, X_test, y_test = train_model(
-                                X=X_data, 
-                                vectors=vectors, 
-                                ids_train=ids_train, 
-                                ids_test=ids_test, 
-                                y_train=y_train, 
-                                y_test=y_test,
-                                source=source,
-                                model_type=args.model,
-                                max_val=MAXVAL
-                            )
+    if args.train:
+        X_data, source, vectors, MAXVAL, \
+            ids_train, ids_test, y_train, y_test, feature, F = __prepare_training(data, args)
+        model, X_test, y_test = train_model(
+                                    X=X_data, 
+                                    vectors=vectors, 
+                                    ids_train=ids_train, 
+                                    ids_test=ids_test, 
+                                    y_train=y_train, 
+                                    y_test_=y_test,
+                                    source=source,
+                                    model_type=args.model,
+                                    max_val=MAXVAL
+                                )
+        report = __evaluate(model, X_test, y_test, key=feature[F])
+        print(report)
 
-    report = __evaluate(model, X_test, y_test, key=feature[F])
-    print(report)
-
-    # binary() 
     exit() 
