@@ -24,7 +24,7 @@ from typing import Any
 
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
 import argparse
 import json
@@ -74,6 +74,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-src', '--source', type=str, nargs='*', default=["ACHGUT", "REDDIT", "GUTENBERG"])
     parser.add_argument('-pr', '--predict', type=str, default=None)
     parser.add_argument('-n', '--number', type=int, default=4000)
+    parser.add_argument('-pcm', '--plot_confusion_matrix', action='store_true', default=False)
     return parser
 
 def __check_text_is_german(text: str) -> bool:
@@ -208,12 +209,12 @@ def __to_num(L: list, key: str) -> list[float]:
     """ turns string labels into float """
     labels = {
                 'author_regiolect': {
-                        "DE-MIDDLE-EAST": 0.0,
+                        "DE-MIDDLE-EAST": 1.0,
                         "DE-MIDDLE-WEST": 1.0,
-                        "DE-NORTH-EAST": 2.0,
-                        "DE-NORTH-WEST": 3.0,
-                        "DE-SOUTH-EAST": 4.0,
-                        "DE-SOUTH-WEST": 5.0
+                        "DE-NORTH-EAST": 0.0,
+                        "DE-NORTH-WEST": 0.0,
+                        "DE-SOUTH-EAST": 2.0,
+                        "DE-SOUTH-WEST": 2.0
                         },
                 'author_education': {
                         "finished_highschool": 0.0,
@@ -230,7 +231,14 @@ def __to_num(L: list, key: str) -> list[float]:
     }
     if key == "author_age":
         def __age(age: str) -> float:
-            return float(int(int(age)/10)) - 1.0
+            if 0 <= int(age) <= 25:
+                return 0.0
+            elif 26 <= int(age) <= 40:
+                return 1.0
+            elif 41 <= int(age) <= 60:
+                return 2.0
+            else:
+                return 3.0
         return [__age(str(i)) for i in L]
     else:
         return [labels.get(key)[i] for i in L]
@@ -239,13 +247,18 @@ def __num_to_str(L: list[float], key: str) -> list[str]:
     """ convert the numerical labels back to their true names """
     
     labels = {
+                #'author_regiolect': {
+                #    0.0: 'DE-MIDDLE-EAST',
+                #    1.0: 'DE-MIDDLE-WEST',
+                #    2.0: 'DE-NORTH-EAST',
+                #    3.0: 'DE-NORTH-WEST',
+                #    4.0: 'DE-SOUTH-EAST',
+                #    5.0: 'DE-SOUTH-WEST'
+                #},
                 'author_regiolect': {
-                    0.0: 'DE-MIDDLE-EAST',
-                    1.0: 'DE-MIDDLE-WEST',
-                    2.0: 'DE-NORTH-EAST',
-                    3.0: 'DE-NORTH-WEST',
-                    4.0: 'DE-SOUTH-EAST',
-                    5.0: 'DE-SOUTH-WEST'
+                    0.0: "DE-NORTH",
+                    1.0: "DE-MIDDLE",
+                    2.0: "DE-SOUTH"
                 },
                 'author_education': {
                     0.0: 'finished_highschool',
@@ -258,14 +271,10 @@ def __num_to_str(L: list[float], key: str) -> list[str]:
                     1.0: 'male'
                 },
                 'author_age': {
-                    0.0: '10-20',
-                    1.0: '20-30',
-                    2.0: '30-40',
-                    3.0: '40-50',
-                    4.0: '50-60',
-                    5.0: '60-70',
-                    6.0: '70-80',
-                    7.0: '80-90'
+                    0.0: '10-25',
+                    1.0: '25-40',
+                    2.0: '40-60',
+                    3.0: '60+'
                 }
             }
     if isinstance(L[0], str):
@@ -280,9 +289,14 @@ def __num_to_str(L: list[float], key: str) -> list[str]:
     
     elif isinstance(L[0], int) and key == "author_age":
         def __age(age: int) -> str:
-            a = str(age)[0]
-            b = int(a)*10
-            return f"{b}-{b+10}"
+            if 0 <= int(age) <= 25:
+                return "10-25"
+            elif 26 <= int(age) <= 40:
+                return "25-40"
+            elif 41 <= int(age) <= 60:
+                return "40-60"
+            else:
+                return "60+"
         return [__age(i) for i in L]
     else:
         return [labels.get(key)[i] for i in L]
@@ -511,7 +525,7 @@ def __plot_items(items: list[DataObject]) -> None:
     sns.barplot(x=list(regiolect_dist.keys()), y=list(regiolect_dist.values()))
     plt.show()
         
-def __evaluate(model: Sequential, X_test: list[float], y_test: list[str], key: str) -> str:
+def __evaluate(model: Sequential, X_test: list[float], y_test: list[str], key: str) -> tuple[str, np.ndarray]:
     y_pred = model.predict(X_test)
     # set the labels and predictions to same type
     # so that we can generate a classification report
@@ -520,7 +534,9 @@ def __evaluate(model: Sequential, X_test: list[float], y_test: list[str], key: s
     y_test = __num_to_str([y for y in y_test], key)
     y_pred = __num_to_str([y for y in y_pred], key)
     report = classification_report(y_test, y_pred)
-    return report
+    confusionMatrix = confusion_matrix(y_test, y_pred)
+    print(confusionMatrix)
+    return report, confusionMatrix
 
 def __setup() -> argparse.Namespace:
     
@@ -600,7 +616,7 @@ def __preprocess(sample: str, maxVal: int = 0) -> tuple[list[tf.Tensor], list[tf
     for_inference = tf.stack([combined_array])
     return for_inference, __zero_pad([zdl_vector], 1931)
 
-def __concat_all_corpus_features(data: DataCorpus, ids: list[int]) -> dict[int, np.ndarray]:
+def __concat_all_corpus_features(data: DataCorpus, ids: list[int], PATH: str) -> dict[int, np.ndarray]:
     zdl_vector_database = __read_parquet(PATH)
     maxVal: int = __maxval([np.array([x for x in embedding]) for embedding in zdl_vector_database.embedding.tolist()])
     with open(f'vectors/statistical_matrix.json', 'r') as f:
@@ -635,7 +651,7 @@ def __concat_all_corpus_features(data: DataCorpus, ids: list[int]) -> dict[int, 
     #except: pass
     return features, maxVal
 
-def __get_training_data(feature: str, ids_: list[int]) -> tuple[list[np.ndarray], str, Any]:
+def __get_training_data(data: DataCorpus, feature: str, ids_: list[int], PATH: str) -> tuple[list[np.ndarray], str, Any]:
     maxVal = 1931
     if feature.capitalize() == "Ortho":
         ortho_path = 'vectors/orthography_matrix.json'
@@ -679,7 +695,7 @@ def __get_training_data(feature: str, ids_: list[int]) -> tuple[list[np.ndarray]
         vectors = wiktionary_matrix
 
     elif feature.lower() == "all":
-        X, maxVal = __concat_all_corpus_features(data, ids_)
+        X, maxVal = __concat_all_corpus_features(data, ids_, PATH)
         source = "all"
         vectors = None
     return X, source, vectors, maxVal
@@ -690,7 +706,7 @@ def __get_text_from_arg(input_str: str) -> str:
     if is_path:
         if not os.path.exists(input_str):
              raise ParsedPathNotExistError("Your input '{}' looks like a path, but the file doesn't exist.".format(input_str))
-        print("reading file...")
+        print("Reading file {}...".format(input_str))
         with open(input_str, 'r', encoding='utf-8') as f:
             input_str = f.read()
     return input_str
@@ -786,7 +802,7 @@ def __get_applicable_ids(data: DataCorpus, feature: dict, F: argparse.Namespace)
         ids_ = random.sample(ids_, args.number)
     return ids_
 
-def __prepare_training(data: DataCorpus, args: argparse.Namespace) -> tuple[list, str, list, int, list, list, list, list, argparse.Namespace, str]:
+def __prepare_training(data: DataCorpus, args: argparse.Namespace, PATH: str) -> tuple[list, str, list, int, list, list, list, list, argparse.Namespace, str]:
     """
     Takes a DataCorpus and argparse Namespace as input,
     and prepares a training session by generating the required data.
@@ -803,7 +819,7 @@ def __prepare_training(data: DataCorpus, args: argparse.Namespace) -> tuple[list
     y = [data[id].content[feature[F]] for id in ids_]
 
     # get training data
-    X_data, source, vectors, MAXVAL = __get_training_data(args.feature, ids_)
+    X_data, source, vectors, MAXVAL = __get_training_data(data, args.feature, ids_, PATH)
     
     # shuffle the training data
     X, y = shuffle(ids_, y, random_state=3)
@@ -882,7 +898,9 @@ def train_model(X: Union[list,dict],
                     y_test_: list, 
                     source: str = "Ortho",
                     model_type: str = "multiclass",
-                    max_val: int = None) -> tuple[Sequential, list[float], list[str]]:
+                    max_val: int = None,
+                    feature: dict = None,
+                    F: str = None) -> tuple[Sequential, list[float], list[str]]:
         
         model_select = {
             "rnn": RNN,
@@ -931,7 +949,7 @@ def train_model(X: Union[list,dict],
             X_train: list[tf.Tensor] = tf.stack(Xtrain)
             X_test: list[tf.Tensor] = tf.stack(Xtest)
 
-            n_inputs, n_outputs = (4, ), y_train.shape[0]
+            n_inputs, n_outputs = (14, ), y_train.shape[0]
             model = multiclass(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
 
         elif source == "all":
@@ -946,11 +964,7 @@ def train_model(X: Union[list,dict],
 
         return model, X_test, y_test_
 
-if __name__ == "__main__":
-
-    clear_session()  # clear any previous training sessions
-    args = __setup()
-    print(LOGO)
+def main(args: argparse.Namespace) -> None:
     if args.test:
         PATH = "test"
     else:
@@ -1011,7 +1025,7 @@ if __name__ == "__main__":
 
     if args.train:
         X_data, source, vectors, MAXVAL, \
-            ids_train, ids_test, y_train, y_test, feature, F = __prepare_training(data, args)
+            ids_train, ids_test, y_train, y_test, feature, F = __prepare_training(data, args, PATH)
         model, X_test, y_test = train_model(
                                     X=X_data, 
                                     vectors=vectors, 
@@ -1021,9 +1035,19 @@ if __name__ == "__main__":
                                     y_test_=y_test,
                                     source=source,
                                     model_type=args.model,
-                                    max_val=MAXVAL
+                                    max_val=MAXVAL,
+                                    feature=feature,
+                                    F=F
                                 )
-        report = __evaluate(model, X_test, y_test, key=feature[F])
+        report, confusionMatrix = __evaluate(model, X_test, y_test, key=feature[F])
         print(report)
+        if args.plot_confusion_matrix:
+            disp = ConfusionMatrixDisplay(confusionMatrix)
+            disp.plot()
+            plt.show()
 
-    exit() 
+if __name__ == "__main__":
+    clear_session()  # clear any previous training sessions
+    args = __setup()
+    print(LOGO)
+    main(args)
