@@ -94,5 +94,5 @@ class Statistext:
             _tokens = tokens[span]
             _ttr = len(_types)/len(_tokens) if len(_tokens) > 0 else 0.0
             averages.append(_ttr)
-            j += window_size
+            j += window_size + 1
         return sum(averages)/len(averages)
