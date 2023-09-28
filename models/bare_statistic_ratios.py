@@ -9,7 +9,7 @@ CONSONANTS = 'bcdfghjklmnpqrstvwxyzßBCDFGHJKLMNPQRSTVWXYZẞ'
 
 # long list of emoticons
 with open(file="./models/wikipedia_emoticons.txt", mode="r", encoding="utf-8") as f:
-    EMOTICONS = f.read().split("\n")  # FIXME: make list not contain funny unicode escape seqs anymore
+    EMOTICONS = f.read().split("\n")
 # incomplete but probably sufficient-for-training list of chat-like acronyms somewhat likely for german texts
 CHAT_ACRONYMS = ["lol", "lul", "lel", "lül", "lmao", "lmfao", "rofl", "smh", "ofc", "nvm", "yolo", "afk", "afaik", "afaic", "tbh", "ngl", "imo", "imho", "idk", "idc", "asap", "bae", "btw", "dafuq", "mmd", "irl", "nsfw", "tldr", "tl,dr", "tl;dr", "tl:dr", "omg", "omfg", "iirc", "asf", "stg"]
 
@@ -19,17 +19,19 @@ NUMERALS_EM = ["null", "ein", "eins", "eines", "eine", "einer", "einem", "einen"
 NUMERALS_IN = ["dreizehn", "vierzehn", "fünfzehn", "sechzehn", "siebzehn", "achtzehn", "neunzehn", "zwanzig", "einundzwanzig", "zweiundzwanzig", "dreiundzwanzig", "vierundzwanzig", "fünfundzwanzig", "sechsundzwanzig", "siebenundzwanzig", "achtundzwanzig", "neunundzwanzig", "dreißig", "einunddreißig", "zweiunddreißig", "dreiunddreißig", "vierunddreißig", "fünfunddreißig", "sechsunddreißig", "siebenunddreißig", "achtunddreißig", "neununddreißig", "vierzig", "einundvierzig", "zweiundvierzig", "dreiundvierzig", "vierundvierzig", "fünfundvierzig", "sechsundvierzig", "siebenundvierzig", "achtundvierzig", "neunundvierzig", "fünfzig", "einundfünfzig", "zweiundfünfzig", "dreiundfünfzig", "vierundfünfzig", "fünfundfünfzig", "sechsundfünfzig", "siebenundfünfzig", "achtundfünfzig", "neunundfünfzig", "sechzig", "einundsechzig", "zweiundsechzig", "dreiundsechzig", "vierundsechzig", "fünfundsechzig", "sechsundsechzig", "siebenundsechzig", "achtundsechzig", "neunundsechzig", "siebzig", "einundsiebzig", "zweiundsiebzig", "dreiundsiebzig", "vierundsiebzig", "fünfundsiebzig", "sechsundsiebzig", "siebenundsiebzig", "achtundsiebzig", "neunundsiebzig", "achtzig", "einundachtzig", "zweiundachtzig", "dreiundachtzig", "vierundachtzig", "fünfundachtzig", "sechsundachtzig", "siebenundachtzig", "achtundachtzig", "neunundachtzig", "neunzig", "einundneunzig", "zweiundneunzig", "dreiundneunzig", "vierundneunzig", "fünfundneunzig", "sechsundneunzig", "siebenundneunzig", "achtundneunzig", "neunundneunzig", "hundert"]
 
 class Statistext:
-    def __init__(self, raw_text, mattr_ws=50):
+    def __init__(self, raw_text, mattr_ws=35):
         """
         :param raw_text: string of text for which stats to be calculated
-        :param mattr_ws: size of windows when calculating MATTR, consider setting this to the lenth of the shortest text in your corpus when comparing multiple ones
+        :param mattr_ws: size (number of tokens) of a window when calculating MATTR,
+        consider setting this to the size of the shortest doc in your corpus for every doc,
+        although at least something around 30 is recommended for significant TTRs)
         """
         # basic building blocks
         self._raw_text = raw_text
         self._mattr_ws = mattr_ws  # window size for MATTR
         self._doc = nlp(self._raw_text)
         self._sentences = [sent for sent in self._doc.sents]
-        self._tokens = [token for token in self._doc]
+        self._tokens = [token for token in self._doc]  # (still needed in mattr method)
         #self._types = set([str(token) for token in self._doc])
         self._words = [token for token in self._doc if not token.is_digit and not token.is_space and not token.is_punct]
         self._numbers = [token for token in self._doc if token.is_digit]
@@ -46,7 +48,6 @@ class Statistext:
         self._emoticons = [token for token in self._raw_text.split() if any(e for e in EMOTICONS if e == token)]
         self._chat_acronyms = [word for word in self._words if str(word).lower() in CHAT_ACRONYMS]
         # lexical diversity
-        #self.ttr = len(self._types)/len(self._tokens) if len(self._tokens) > 0 else 0.0
         self.mattr = self._calculate_mattr()
         # average length of 'lexical' words
         self.characters_per_word = sum(len(word) for word in self._words) / len(self._words) if len(self._words) > 0 else 0.0
@@ -81,7 +82,7 @@ class Statistext:
         self.colloq_alt_spelling = "TODO: def"  # braucht liste
         # all working stats
         self.all_stats = numpy.array([
-            #self.ttr, self.mattr,
+            self.mattr,
             self.characters_per_word, self.characters_per_noun, self.characters_per_verb, self.characters_per_adjective, self.characters_per_adverb,
             self.words_per_sentence, self.nouns_per_sentence, self.verbs_per_sentence, self.adjectives_per_sentence, self.adverbs_per_sentence,
             self.articles_per_noun, self.adjectives_per_noun, self.adverbs_per_verb,
@@ -94,21 +95,13 @@ class Statistext:
         window_size = self._mattr_ws
         window_start = 0
         ttr_values = []
-        for i in range(len(doc_size)/window_size):
+        for i in range(doc_size//window_size):
             window = slice(window_start, window_start+window_size)
-            window_types = self._types[window]
-            window_tokens = self._tokens[window]
+            window_doc = self._doc[window]
+            window_tokens = [str(token) for token in window_doc]
+            window_types = set(window_tokens)
             window_ttr = len(window_types)/len(window_tokens) if len(window_tokens) > 0 else 0.0
             ttr_values.append(window_ttr)
             window_start += window_size
         return sum(ttr_values)/len(ttr_values) if len(ttr_values) > 0 else 0.0
-        
-        windows = [text[i:i+window_size] for i in range(0, len(text)-window_size+1, step_size)]
-    ttr_values = []
-    for window in windows:
-        tokens = window.split()
-        unique_tokens = set(tokens)
-        ttr = len(unique_tokens) / len(tokens) if len(tokens) > 0 else 0.0
-        ttr_values.append(ttr)
     
-    return sum(ttr_values) / len(ttr_values)
