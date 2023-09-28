@@ -1,5 +1,5 @@
 import tensorflow as tf
-from auxiliary import ABOUT, MALE_CHARS, FEMALE_CHARS
+from auxiliary import ABOUT, LOGO, MALE_CHARS, FEMALE_CHARS
 from corpus import DataCorpus, DataObject
 from crawl_all_datasets import download_data
 from data.gutenberg.gutenberg_to_dataobject import align_dicts
@@ -551,6 +551,13 @@ def __concat_vectors(
         statistical_array: np.ndarray,
         maxVal: int = 0) -> np.ndarray:
     
+    """
+    Concatenate 4 arrays of different shapes and dimensions to generate 
+    one 2D array representing all features.
+    :param zdl_vector: numpy array containing a ZDL vector, usually of shape (1, 1931, 6)
+    :ortho_vector: numpy array representing orthography matrix. (5, 96)
+    """
+
     # Find the maximum dimensions for padding
     if maxVal == 0:
         max_rows = max(zdl_vector.shape[0], ortho_vector.shape[0], wiktionary_vector.shape[0], statistical_array.shape[0])
@@ -822,72 +829,7 @@ def binary(n_inputs: int, n_outputs: int, X_train: tf.Tensor, X_test: tf.Tensor,
 
     return model
 
-if __name__ == "__main__":
-
-    clear_session()  # clear any previous training sessions
-    args = __setup()
-    
-    if args.test:
-        PATH = "test"
-    else:
-        PATH = args.path
-    __make_directories(PATH)
-
-    if args.about:
-        print(ABOUT)
-
-    if args.download_data:
-        download_data(['achse', 'ortho', 'reddit_locales'], "test")
-
-    if args.download_wikt:
-        download_wiktionary()
-
-    data = DataCorpus()
-
-    if args.predict != None:
-        __print_profile()
-
-    # if we want to build corpus
-    if args.build:
-        data = __build_corpus(data, PATH)
-        data.save_to_avro(f"{PATH}/corpus.avro")
-
-    # read existing corpus
-    data.read_avro(f'{PATH}/corpus.avro')
-    print(f"The dataset contains {len(data)} items.")
-
-    if args.query != None:
-        items = __get_query(data, args.query)
-        __plot_items(items)
-
-    if args.save:
-        data.save_to_avro(f'{PATH}/corpus.avro')
-
-    if args.build_wikt:
-        wiktionary_matrix = WiktionaryModel(source=data)
-        wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
-    
-    if args.build_zdl:
-        __build_zdl_vectors(data=data)
-
-    if args.build_ortho:
-        ortho_matrix = __build_ortho_matrix(data)
-        with open(f'vectors/orthography_matrix.json', 'w') as f:
-            json.dump(ortho_matrix, f)
-        exit()
-
-    if args.build_stats:
-        statistext = __build_statistical_matrix(data)
-        with open(f'vectors/statistical_matrix.json', 'w') as f:
-            json.dump(statistext, f)
-        exit()
-
-    if not args.train:
-        exit()
-    
-    X_data, source, vectors, MAXVAL, ids_train, ids_test, y_train, y_test, feature, F = __prepare_training()
-
-    def train_model(X: Union[list,dict], 
+def train_model(X: Union[list,dict], 
                     vectors, 
                     ids_train: list, 
                     ids_test: list, 
@@ -958,6 +900,71 @@ if __name__ == "__main__":
             model.save(f'models/trained_models/fully_mapped_features_{feature[F]}.model')
 
         return model, X_test, y_test_
+
+if __name__ == "__main__":
+
+    clear_session()  # clear any previous training sessions
+    args = __setup()
+    print(LOGO)
+    if args.test:
+        PATH = "test"
+    else:
+        PATH = args.path
+    __make_directories(PATH)
+
+    if args.about:
+        print(ABOUT)
+
+    if args.download_data:
+        download_data(['achse', 'ortho', 'reddit_locales'], "test")
+
+    if args.download_wikt:
+        download_wiktionary()
+
+    data = DataCorpus()
+
+    if args.predict != None:
+        __print_profile()
+
+    # if we want to build corpus
+    if args.build:
+        data = __build_corpus(data, PATH)
+        data.save_to_avro(f"{PATH}/corpus.avro")
+
+    # read existing corpus
+    data.read_avro(f'{PATH}/corpus.avro')
+    print(f"The dataset contains {len(data)} items.")
+
+    if args.query != None:
+        items = __get_query(data, args.query)
+        __plot_items(items)
+
+    if args.save:
+        data.save_to_avro(f'{PATH}/corpus.avro')
+
+    if args.build_wikt:
+        wiktionary_matrix = WiktionaryModel(source=data)
+        wiktionary_matrix.df_matrix.to_parquet('data/wiktionary/wiktionary.parquet')
+    
+    if args.build_zdl:
+        __build_zdl_vectors(data=data)
+
+    if args.build_ortho:
+        ortho_matrix = __build_ortho_matrix(data)
+        with open(f'vectors/orthography_matrix.json', 'w') as f:
+            json.dump(ortho_matrix, f)
+        exit()
+
+    if args.build_stats:
+        statistext = __build_statistical_matrix(data)
+        with open(f'vectors/statistical_matrix.json', 'w') as f:
+            json.dump(statistext, f)
+        exit()
+
+    if not args.train:
+        exit()
+    
+    X_data, source, vectors, MAXVAL, ids_train, ids_test, y_train, y_test, feature, F = __prepare_training()
      
     model, X_test, y_test = train_model(
                                 X=X_data, 

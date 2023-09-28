@@ -1,4 +1,4 @@
-ABOUT = \
+LOGO = \
 """
 
  /$$$$$$$  /$$$$$$$$ /$$$$$$$  /$$$$$$$$                    /$$     /$$                    
@@ -10,10 +10,12 @@ ABOUT = \
 | $$$$$$$/| $$$$$$$$| $$  | $$   | $$|  $$$$$$$|  $$$$$$$  |  $$$$/| $$   \  $/  |  $$$$$$$
 |_______/ |________/|__/  |__/   |__/ \_______/ \_______/   \___/  |__/    \_/    \_______/
                                                                                            
-                                                                                           
+"""
+
+ABOUT = \
+"""
 BERTective is an author profiling tool that is trained on multiple data resources using various linguistic features and LLMs.
 The tool can be used in the CLI using different arguments.
-
 """
 
 MALE_CHARS = \
