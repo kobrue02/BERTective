@@ -104,8 +104,8 @@ def __wiktionary(wiki_list: list[str]):
     with open('data/wiktionary/wiktionary.json', 'w', encoding='utf-8') as f:
         json.dump(wiktionary, f) 
 
-def wiktionary():
+def download_wiktionary():
     __wiktionary(WIKI_LIST)
 
 if __name__ == "__main__":
-    wiktionary()
+    download_wiktionary()
