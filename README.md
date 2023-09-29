@@ -1,5 +1,5 @@
 # BERTective
-BERTective ist ein auf Deep Learning mit linguistischen Features basierendes Tool, welches für die Profiling des Urhebers eines Textes entwickelt wurde.
+BERTective ist ein auf Deep Learning mit linguistischen Features basierendes Tool, welches für die Profilierung des Urhebers eines Textes entwickelt wurde.
 
 ## Anwendung
 ### Installation
