@@ -9,10 +9,10 @@ python main.py -dd -dw
 #### Korpus aufbauen
 python main.py -b  
 #### Features berechnen
-python main.py -bw
-python main.py -bz
-python main.py -bo
-python main.py -bs
+python main.py -bw  
+python main.py -bz  
+python main.py -bo  
+python main.py -bs  
 
 # Aufbau des Programms
 ![architecture](https://github.com/kobrue02/BERTective/blob/main/architecture.drawio.svg)
