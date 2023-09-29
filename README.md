@@ -14,5 +14,5 @@ python main.py -bz
 python main.py -bo  
 python main.py -bs  
 
-# Aufbau des Programms
+## Aufbau des Programms
 ![architecture](https://github.com/kobrue02/BERTective/blob/main/architecture.drawio.svg)
