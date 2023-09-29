@@ -63,7 +63,7 @@ class OrthoMatrixModel:
         result = np.zeros((96,))
         for vector in vectors:
             result = np.add(result, vector)
-        return np.divide(result, len(vectors))
+        return result
 
     def find_ortho_match_in_text(self, text: str, orthography_set: str) -> np.ndarray:
         '''

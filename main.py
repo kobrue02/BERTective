@@ -209,12 +209,12 @@ def __to_num(L: list, key: str) -> list[float]:
     """ turns string labels into float """
     labels = {
                 'author_regiolect': {
-                        "DE-MIDDLE-EAST": 1.0,
+                        "DE-MIDDLE-EAST": 0.0,
                         "DE-MIDDLE-WEST": 1.0,
-                        "DE-NORTH-EAST": 0.0,
-                        "DE-NORTH-WEST": 0.0,
-                        "DE-SOUTH-EAST": 2.0,
-                        "DE-SOUTH-WEST": 2.0
+                        "DE-NORTH-EAST": 2.0,
+                        "DE-NORTH-WEST": 3.0,
+                        "DE-SOUTH-EAST": 4.0,
+                        "DE-SOUTH-WEST": 5.0
                         },
                 'author_education': {
                         "finished_highschool": 0.0,
@@ -247,18 +247,13 @@ def __num_to_str(L: list[float], key: str) -> list[str]:
     """ convert the numerical labels back to their true names """
     
     labels = {
-                #'author_regiolect': {
-                #    0.0: 'DE-MIDDLE-EAST',
-                #    1.0: 'DE-MIDDLE-WEST',
-                #    2.0: 'DE-NORTH-EAST',
-                #    3.0: 'DE-NORTH-WEST',
-                #    4.0: 'DE-SOUTH-EAST',
-                #    5.0: 'DE-SOUTH-WEST'
-                #},
                 'author_regiolect': {
-                    0.0: "DE-NORTH",
-                    1.0: "DE-MIDDLE",
-                    2.0: "DE-SOUTH"
+                    0.0: 'DE-MIDDLE-EAST',
+                    1.0: 'DE-MIDDLE-WEST',
+                    2.0: 'DE-NORTH-EAST',
+                    3.0: 'DE-NORTH-WEST',
+                    4.0: 'DE-SOUTH-EAST',
+                    5.0: 'DE-SOUTH-WEST'
                 },
                 'author_education': {
                     0.0: 'finished_highschool',
@@ -728,6 +723,9 @@ def __predict(input_arg: str, model_features: str = 'all') -> dict[str, dict[str
             if feature == 'author_regiolect':
                 reconstructed_model = load_model(f'models/trained_models/ZDL_features_{feature}.model')
                 pred = reconstructed_model.predict(tf.stack(zdl_vector))
+            elif feature == 'author_education':
+                reconstructed_model = load_model(f'models/trained_models/ortho_features_{feature}.model')
+                pred = reconstructed_model.predict(tf.stack(zdl_vector))
             else:
                 reconstructed_model = load_model(f'models/trained_models/fully_mapped_features_{feature}.model')
                 pred = reconstructed_model.predict(data)
@@ -941,6 +939,8 @@ def train_model(X: Union[list,dict],
 
             n_inputs, n_outputs = (5, 96), y_train.shape[0]
             model = model_(n_inputs, n_outputs, X_train, X_test, y_train, y_test)
+            os.makedirs('models/trained_models', exist_ok=True)
+            model.save(f'models/trained_models/ortho_features_{feature[F]}.model')
 
         elif source == "Stat":
 
