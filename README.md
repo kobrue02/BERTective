@@ -1,9 +1,11 @@
 # BERTective
 BERTective ist ein auf Deep Learning mit linguistischen Features basierendes Tool, welches für die Profiling des Urhebers eines Textes entwickelt wurde.
 
-## Installation
+## Anwendung
+### Installation
 git clone https://github.com/kobrue02/BERTective.git  
 pip install -r requirements.txt  
+### Download der Daten und Vorbereitung der Features
 #### Trainingsdaten herunterladen
 python main.py -dd -dw  
 #### Korpus aufbauen
