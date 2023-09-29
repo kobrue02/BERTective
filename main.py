@@ -539,7 +539,7 @@ def __setup() -> argparse.Namespace:
     args = parser.parse_args()
 
     # some assertions
-    assert args.test ^ (args.path != 'test')
+    assert args.test ^ bool(args.path)
     assert args.model in ["rnn", "multiclass", "binary"]
 
     if args.about:
@@ -574,12 +574,12 @@ def __concat_vectors(
 
     # Find the maximum dimensions for padding
     if maxVal == 0:
-        max_rows = max(zdl_vector.shape[0], ortho_vector.shape[0], wiktionary_vector.shape[0], statistical_array.shape[0])
+        max_rows = max(zdl_vector.shape[0], len(ortho_vector), wiktionary_vector.shape[0], statistical_array.shape[0])
     else:
-        max_rows = max(maxVal, ortho_vector.shape[0], wiktionary_vector.shape[0], statistical_array.shape[0])
+        max_rows = max(maxVal, len(ortho_vector), wiktionary_vector.shape[0], statistical_array.shape[0])
     
     try:
-        max_cols = max(zdl_vector.shape[1], ortho_vector.shape[1])
+        max_cols = max(zdl_vector.shape[1], len(ortho_vector[0]))
     except IndexError:
         print(zdl_vector)
         exit()
@@ -589,7 +589,7 @@ def __concat_vectors(
 
     # Copy the values from the original arrays to the new arrays
     combined_array[:zdl_vector.shape[0], :zdl_vector.shape[1]] = zdl_vector
-    combined_array[:ortho_vector.shape[0], :ortho_vector.shape[1]] = ortho_vector
+    combined_array[:len(ortho_vector), :len(ortho_vector[0])] = ortho_vector
     combined_array[:wiktionary_vector.shape[0], :1] = wiktionary_vector.reshape(-1, 1)  # Reshape and copy
     combined_array[:statistical_array.shape[0], :1] = statistical_array.reshape(-1, 1)  # Reshape and copy
     return combined_array
@@ -601,7 +601,7 @@ def __preprocess(sample: str, maxVal: int = 0) -> tuple[list[tf.Tensor], list[tf
     """
     print('Analysing the text...')
     zdl_vector = __get_zdl_embedding(sample)
-    ortho_vector = np.array(list(__get_ortho_embedding(sample).values()))
+    ortho_vector = list(__get_ortho_embedding(sample).values())
     wiktionary_vector = __get_wiktionary_embedding(sample)
     statistical_array = __get_statistical_embedding(sample)
 
@@ -609,7 +609,7 @@ def __preprocess(sample: str, maxVal: int = 0) -> tuple[list[tf.Tensor], list[tf
     
     print(f"The text input has been embedded into a vector of the shape {combined_array.shape}.")
     for_inference = tf.stack([combined_array])
-    return for_inference, __zero_pad([zdl_vector], 1931)
+    return for_inference, __zero_pad([zdl_vector], 1931), ortho_vector
 
 def __concat_all_corpus_features(data: DataCorpus, ids: list[int], PATH: str) -> dict[int, np.ndarray]:
     zdl_vector_database = __read_parquet(PATH)
@@ -714,7 +714,7 @@ def __predict(input_arg: str, model_features: str = 'all') -> dict[str, dict[str
     """
     
     text = __get_text_from_arg(input_arg)
-    data, zdl_vector = __preprocess(text, 1931)
+    data, zdl_vector, ortho_vector = __preprocess(text, 1931)
     features = ['author_gender', 'author_age', 'author_education', 'author_regiolect']
     profile = {}
     for feature in features:
@@ -724,8 +724,9 @@ def __predict(input_arg: str, model_features: str = 'all') -> dict[str, dict[str
                 reconstructed_model = load_model(f'models/trained_models/ZDL_features_{feature}.model')
                 pred = reconstructed_model.predict(tf.stack(zdl_vector))
             elif feature == 'author_education':
+                stacked = tf.stack([ortho_vector])
                 reconstructed_model = load_model(f'models/trained_models/ortho_features_{feature}.model')
-                pred = reconstructed_model.predict(tf.stack(zdl_vector))
+                pred = reconstructed_model.predict(stacked)
             else:
                 reconstructed_model = load_model(f'models/trained_models/fully_mapped_features_{feature}.model')
                 pred = reconstructed_model.predict(data)
