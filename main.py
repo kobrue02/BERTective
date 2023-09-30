@@ -57,7 +57,7 @@ def __init_parser() -> argparse.ArgumentParser:
     parser.add_argument('-dw', '--download_wikt', action='store_true', help='download wiktionary resources')
     parser.add_argument('-t', '--test', action='store_true', help='sets PATH to "test"')
     parser.add_argument('-b', '--build', action='store_true', help='builds a new corpus from scratch')
-    parser.add_argument('-p', '--path', type=str, default='test')
+    parser.add_argument('-p', '--path', type=str, default='data')
     parser.add_argument('-s', '--save', action='store_true')
     parser.add_argument('-bw', '--build_wikt', action='store_true')
     parser.add_argument('-bs', '--build_stats', action='store_true')
