@@ -982,7 +982,8 @@ def main(args: argparse.Namespace) -> None:
 
     if args.download_wikt:
         # download wiktionary with scraper
-        download_wiktionary()
+        os.makedirs(f"{PATH}/wiktionary", exist_ok=True)
+        download_wiktionary(PATH)
 
     data = DataCorpus()
 

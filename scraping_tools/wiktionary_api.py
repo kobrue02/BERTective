@@ -5,6 +5,12 @@ import json
 from bs4 import BeautifulSoup
 from pprint import pprint
 
+import os
+import sys
+current = os.path.dirname(os.path.realpath(__file__))
+parent = os.path.dirname(current)
+sys.path.append(parent)
+
 WIKI_LIST = [
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Abkürzungen_im_Internet',
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Anglizismen',
@@ -88,7 +94,7 @@ def get_words_word_list(L: list) -> list:
             break
     return target
 
-def __wiktionary(wiki_list: list[str]):
+def __wiktionary(wiki_list: list[str], PATH):
     wiktionary = {}
     for url in wiki_list:
         base = str(url.split('/')[-1])
@@ -101,11 +107,11 @@ def __wiktionary(wiki_list: list[str]):
             target = [w.get_text() for w in L]
             if len(target) > 1:
                 wiktionary[base] = target
-    with open('data/wiktionary/wiktionary.json', 'w', encoding='utf-8') as f:
+    with open(f'{PATH}/wiktionary/wiktionary.json', 'w', encoding='utf-8') as f:
         json.dump(wiktionary, f) 
 
-def download_wiktionary():
-    __wiktionary(WIKI_LIST)
+def download_wiktionary(PATH):
+    __wiktionary(WIKI_LIST, PATH)
 
 if __name__ == "__main__":
     download_wiktionary()
