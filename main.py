@@ -422,7 +422,8 @@ def __build_statistical_matrix(data: DataCorpus) -> dict[str, dict[str, float]]:
         text = data[n].text
 
         statistecs = Statistext(text)
-        matrix[ID] = statistecs.all_stats
+        #matrix[ID] = statistecs.all_stats
+        matrix[ID] = list(statistecs.all_stats)
     return matrix
 
 def __zero_pad(X: list, maxVal: int) -> list[tf.Tensor]:
@@ -667,7 +668,8 @@ def __get_training_data(data: DataCorpus, feature: str, ids_: list[int], PATH: s
                                       "Please do so, using -bs")
         with open(stat_path, 'r') as f:
             statistext: dict[str, dict] = json.load(f)
-        X = [np.array(list(statistext[str(ID)].values())) for ID in ids_]
+        #X = [np.array(list(statistext[str(ID)].values())) for ID in ids_]
+        X = [np.array(statistext[str(ID)]) for ID in ids_]
         source = "Stat"
         vectors = statistext
 
