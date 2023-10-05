@@ -344,7 +344,8 @@ def __build_zdl_vectors(data: DataCorpus) -> None:
             sample_vectors[key] = sample_vectors[key].tolist()
 
         vector_database = pd.DataFrame(sample_vectors.items(), columns=['ID', 'embedding'])
-        vector_database.to_parquet(f'test/ZDL/zdl_word_embeddings_batch_{k}.parquet')
+        os.makedirs('data/ZDL', exist_ok=True)
+        vector_database.to_parquet(f'data/ZDL/zdl_word_embeddings_batch_{k}.parquet')
     
     if dict_list:
         vectionary = dict_list[0]
