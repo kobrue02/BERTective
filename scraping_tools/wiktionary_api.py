@@ -5,12 +5,6 @@ import json
 from bs4 import BeautifulSoup
 from pprint import pprint
 
-import os
-import sys
-current = os.path.dirname(os.path.realpath(__file__))
-parent = os.path.dirname(current)
-sys.path.append(parent)
-
 WIKI_LIST = [
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Abkürzungen_im_Internet',
         'https://de.wiktionary.org/wiki/Verzeichnis:Deutsch/Anglizismen',

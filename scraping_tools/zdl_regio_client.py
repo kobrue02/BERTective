@@ -7,7 +7,8 @@ import random
 import requests
 import string
 import nltk
-from src.german_stopwords import stopwords_ as stopwords
+from bertective.features.zdl import _get_stopwords as _sw_loader
+stopwords = _sw_loader()
 from tqdm import tqdm
 from pprint import pprint
 

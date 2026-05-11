@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bertective"
+version = "0.1.0"
+description = "German author profiling via linguistic features and deep learning"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas",
+    "scikit-learn",
+    "langdetect",
+    "matplotlib",
+    "tensorflow",
+    "seaborn",
+    "spacy",
+    "nltk",
+    "torch",
+    "fastavro",
+    "keras",
+    "scikeras",
+    "trafilatura",
+    "pyarrow",
+    "fastparquet",
+    "emoji",
+    "tqdm",
+    "requests",
+]
+
+[project.scripts]
+bertective = "bertective.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bertective"]
+
+[dependency-groups]
+dev = []

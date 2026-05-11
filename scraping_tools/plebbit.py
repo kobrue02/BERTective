@@ -3,13 +3,9 @@ import requests
 import json
 from tqdm import tqdm
 
-# to import scraper from same-level subdirectory
 import os
-import sys
-current = os.path.dirname(os.path.realpath(__file__))
-parent = os.path.dirname(current)
-sys.path.append(parent)
-from models.zdl_vector_model import AREAL_DICT
+
+from bertective.constants import AREAL_DICT
 
 def pushshift_request(subreddit: str, limit: str, before: str = "0", after: str = "0"):
 
